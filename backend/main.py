@@ -1,4 +1,6 @@
 import cv2
+import glob
+import sys
 import time
 from flask import Flask, Response, send_from_directory
 from flask_socketio import SocketIO
@@ -21,6 +23,7 @@ MAX_READ_RETRIES = 5
 # Shared camera instance used by the video stream generator.
 camera = None
 _printed_picamera2_hint = False
+_printed_runtime_diagnostics = False
 
 
 class PiCameraAdapter:
@@ -81,6 +84,32 @@ def _release_camera(cam):
         pass
 
 
+def _gstreamer_enabled_in_opencv():
+    try:
+        build_info = cv2.getBuildInformation()
+    except Exception:
+        return False
+
+    for line in build_info.splitlines():
+        if "GStreamer" in line:
+            return "YES" in line.upper()
+    return False
+
+
+def _print_runtime_diagnostics_once():
+    global _printed_runtime_diagnostics
+
+    if _printed_runtime_diagnostics:
+        return
+
+    _printed_runtime_diagnostics = True
+    video_nodes = sorted(glob.glob("/dev/video*"))
+    print(f"Python version: {sys.version.split()[0]}")
+    print(f"OpenCV version: {cv2.__version__}")
+    print(f"OpenCV GStreamer support: {_gstreamer_enabled_in_opencv()}")
+    print(f"Detected V4L2 nodes: {video_nodes if video_nodes else 'none'}")
+
+
 def _warmup_camera(cam, frames=20):
     print("Warming up camera sensor...")
     for _ in range(frames):
@@ -92,11 +121,13 @@ def init_camera():
     global camera
     global _printed_picamera2_hint
 
+    _print_runtime_diagnostics_once()
+
     if camera is not None:
         _release_camera(camera)
 
     if Picamera2 is None and not _printed_picamera2_hint:
-        print("Picamera2 import unavailable. If using a venv on Raspberry Pi OS, recreate it with --system-site-packages or install picamera2 in that environment.")
+        print("Picamera2 import unavailable. If using a venv on Raspberry Pi OS, use system Python or recreate it with --system-site-packages.")
         _printed_picamera2_hint = True
 
     attempts = []
@@ -112,20 +143,33 @@ def init_camera():
                 cv2.CAP_GSTREAMER,
             ),
         ),
-        (
-            "V4L2 GStreamer",
-            lambda: cv2.VideoCapture(
-                f"v4l2src device=/dev/video0 ! video/x-raw,width={CAMERA_WIDTH},height={CAMERA_HEIGHT} ! videoconvert ! appsink",
-                cv2.CAP_GSTREAMER,
-            ),
-        ),
-        ("V4L2", lambda: cv2.VideoCapture(0, cv2.CAP_V4L2)),
-        ("Default", lambda: cv2.VideoCapture(0)),
+    ])
+
+    for dev_path in sorted(glob.glob("/dev/video*")):
+        attempts.append(
+            (
+                f"V4L2 GStreamer {dev_path}",
+                lambda path=dev_path: cv2.VideoCapture(
+                    f"v4l2src device={path} ! video/x-raw,width={CAMERA_WIDTH},height={CAMERA_HEIGHT} ! videoconvert ! appsink",
+                    cv2.CAP_GSTREAMER,
+                ),
+            )
+        )
+        attempts.append((f"V4L2 {dev_path}", lambda path=dev_path: cv2.VideoCapture(path, cv2.CAP_V4L2)))
+
+    attempts.extend([
+        ("V4L2 index0", lambda: cv2.VideoCapture(0, cv2.CAP_V4L2)),
+        ("Default index0", lambda: cv2.VideoCapture(0)),
     ])
 
     for backend_name, open_camera in attempts:
-        cam = open_camera()
-        if backend_name == "V4L2":
+        try:
+            cam = open_camera()
+        except Exception as exc:
+            print(f"{backend_name} open threw exception: {exc}")
+            continue
+
+        if backend_name.startswith("V4L2"):
             _configure_v4l2(cam)
 
         if not cam.isOpened():
