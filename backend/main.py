@@ -7,15 +7,16 @@ app = Flask(__name__, static_folder='../frontend/dist', static_url_path='/')
 # Allow all origins for easier debugging between laptop and Pi
 socketio = SocketIO(app, cors_allowed_origins="*")
 
-# 1. Use V4L2 Backend specifically for modern Raspberry Pi OS
-camera = cv2.VideoCapture(0, cv2.CAP_V4L2)
+# Try standard first, but with the GStreamer backend which is better on new Debian
+camera = cv2.VideoCapture("v4l2src device=/dev/video0 ! video/x-raw,width=640,height=480 ! videoconvert ! appsink", cv2.CAP_GSTREAMER)
 
-# 2. OPTIMIZATION: Force lower resolution and MJPG format
-# High resolution will cause the white/laggy screen on Pi Zero 2W
-camera.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
-camera.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
-camera.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*'MJPG'))
-camera.set(cv2.CAP_PROP_FPS, 20)
+# IF THAT FAILS, fallback to the previous V4L2 method but with extra wait time
+if not camera.isOpened():
+    print("GStreamer failed, falling back to V4L2...")
+    camera = cv2.VideoCapture(0, cv2.CAP_V4L2)
+    camera.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*'MJPG'))
+    camera.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
+    camera.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
 
 # 3. WARM-UP: Discard the first 20 frames to allow Auto-Exposure to settle
 print("Warming up camera sensor...")
@@ -57,4 +58,4 @@ def handle_move(data):
 
 if __name__ == '__main__':
     # host='0.0.0.0' allows external access from your laptop
-    socketio.run(app, host='0.0.0.0', port=5000, debug=False)
+    socketio = SocketIO(app, cors_allowed_origins="*", async_mode='gevent')
