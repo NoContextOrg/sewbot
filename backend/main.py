@@ -4,13 +4,13 @@ from flask import Flask, Response, send_from_directory
 from flask_socketio import SocketIO
 
 app = Flask(__name__, static_folder='../frontend/dist', static_url_path='/')
-# Allow all origins for easier debugging between laptop and Pi
-socketio = SocketIO(app, cors_allowed_origins="*")
 
-# Try standard first, but with the GStreamer backend which is better on new Debian
+# 1. Initialize SocketIO with gevent here at the top
+socketio = SocketIO(app, cors_allowed_origins="*", async_mode='gevent')
+
+# Setup Camera (GStreamer pipe for Debian 13/Trixie)
 camera = cv2.VideoCapture("v4l2src device=/dev/video0 ! video/x-raw,width=640,height=480 ! videoconvert ! appsink", cv2.CAP_GSTREAMER)
 
-# IF THAT FAILS, fallback to the previous V4L2 method but with extra wait time
 if not camera.isOpened():
     print("GStreamer failed, falling back to V4L2...")
     camera = cv2.VideoCapture(0, cv2.CAP_V4L2)
@@ -18,7 +18,7 @@ if not camera.isOpened():
     camera.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
     camera.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
 
-# 3. WARM-UP: Discard the first 20 frames to allow Auto-Exposure to settle
+# Warm-up
 print("Warming up camera sensor...")
 for _ in range(20):
     camera.read()
@@ -34,14 +34,10 @@ def gen_frames():
             print("Error: Could not read frame.")
             break
         
-        # 4. Low quality (30-40) is essential for Zero 2W Wi-Fi stability
         _, buffer = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 35])
-        
-        frame_bytes = buffer.tobytes()
         yield (b'--frame\r\n'
-               b'Content-Type: image/jpeg\r\n\r\n' + frame_bytes + b'\r\n')
+               b'Content-Type: image/jpeg\r\n\r\n' + buffer.tobytes() + b'\r\n')
         
-        # Small sleep to prevent CPU spiking at 100%
         time.sleep(0.01)
 
 @app.route('/video_feed')
@@ -50,12 +46,11 @@ def video_feed():
 
 @socketio.on('move')
 def handle_move(data):
-    # Ensure data is a dict and has 'direction'
     if isinstance(data, dict) and 'direction' in data:
         print(f"Command: {data['direction']}")
-    else:
-        print(f"Received raw data: {data}")
 
+# THIS IS THE CRUCIAL PART
 if __name__ == '__main__':
-    # host='0.0.0.0' allows external access from your laptop
-    socketio = SocketIO(app, cors_allowed_origins="*", async_mode='gevent')
+    print("Starting Robot Server on http://0.0.0.0:5000")
+    # You MUST call socketio.run to keep the script alive
+    socketio.run(app, host='0.0.0.0', port=5000)
