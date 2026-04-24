@@ -1,7 +1,12 @@
 import cv2
 import glob
+import os
+import select
+import shutil
+import subprocess
 import sys
 import time
+import numpy as np
 from flask import Flask, Response, send_from_directory
 from flask_socketio import SocketIO
 
@@ -65,6 +70,103 @@ class PiCameraAdapter:
             self._cam.stop()
         except Exception:
             pass
+
+
+class RpicamMjpegAdapter:
+    def __init__(self, width, height, fps):
+        self._opened = False
+        self._buffer = b""
+        self._proc = None
+
+        cmd = [
+            "rpicam-vid",
+            "--timeout",
+            "0",
+            "--nopreview",
+            "--codec",
+            "mjpeg",
+            "--width",
+            str(width),
+            "--height",
+            str(height),
+            "--framerate",
+            str(fps),
+            "--quality",
+            "70",
+            "-o",
+            "-",
+        ]
+
+        self._proc = subprocess.Popen(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            bufsize=0,
+        )
+        self._opened = self._proc.poll() is None and self._proc.stdout is not None
+
+    def isOpened(self):
+        return self._opened
+
+    def _read_jpeg_bytes(self, max_wait_sec=1.5):
+        if self._proc is None or self._proc.stdout is None:
+            return None
+
+        fd = self._proc.stdout.fileno()
+        deadline = time.time() + max_wait_sec
+
+        while time.time() < deadline:
+            if self._proc.poll() is not None:
+                self._opened = False
+                return None
+
+            ready, _, _ = select.select([fd], [], [], 0.15)
+            if not ready:
+                continue
+
+            chunk = os.read(fd, 8192)
+            if not chunk:
+                continue
+
+            self._buffer += chunk
+            start = self._buffer.find(b"\xff\xd8")
+            end = self._buffer.find(b"\xff\xd9", start + 2)
+            if start != -1 and end != -1:
+                jpeg = self._buffer[start:end + 2]
+                self._buffer = self._buffer[end + 2:]
+                return jpeg
+
+        return None
+
+    def read(self):
+        if not self._opened:
+            return False, None
+
+        jpeg = self._read_jpeg_bytes()
+        if jpeg is None:
+            return False, None
+
+        frame = cv2.imdecode(np.frombuffer(jpeg, dtype=np.uint8), cv2.IMREAD_COLOR)
+        if frame is None:
+            return False, None
+        return True, frame
+
+    def release(self):
+        if not self._opened:
+            return
+
+        self._opened = False
+        if self._proc is None:
+            return
+
+        try:
+            self._proc.terminate()
+            self._proc.wait(timeout=1)
+        except Exception:
+            try:
+                self._proc.kill()
+            except Exception:
+                pass
         try:
             self._cam.close()
         except Exception:
@@ -134,6 +236,8 @@ def init_camera():
 
     if Picamera2 is not None:
         attempts.append(("Picamera2", lambda: PiCameraAdapter(CAMERA_WIDTH, CAMERA_HEIGHT)))
+    elif shutil.which("rpicam-vid") is not None:
+        attempts.append(("Rpicam MJPEG", lambda: RpicamMjpegAdapter(CAMERA_WIDTH, CAMERA_HEIGHT, CAMERA_FPS)))
 
     attempts.extend([
         (
@@ -146,6 +250,7 @@ def init_camera():
     ])
 
     for dev_path in sorted(glob.glob("/dev/video*")):
+        dev_index = int(dev_path.replace("/dev/video", ""))
         attempts.append(
             (
                 f"V4L2 GStreamer {dev_path}",
@@ -155,7 +260,7 @@ def init_camera():
                 ),
             )
         )
-        attempts.append((f"V4L2 {dev_path}", lambda path=dev_path: cv2.VideoCapture(path, cv2.CAP_V4L2)))
+        attempts.append((f"V4L2 index{dev_index}", lambda idx=dev_index: cv2.VideoCapture(idx, cv2.CAP_V4L2)))
 
     attempts.extend([
         ("V4L2 index0", lambda: cv2.VideoCapture(0, cv2.CAP_V4L2)),
