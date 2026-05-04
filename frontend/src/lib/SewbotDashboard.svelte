@@ -280,7 +280,7 @@
     border-left:4px solid #EF4444;
     color:#FCA5A5;
   }
-  ::slotted(.bubble .ts){
+  ::slotted(.bubble) .ts{
     margin-top:6px;
     font-size:11px;
     color:var(--sb-accent);
