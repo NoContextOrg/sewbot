@@ -117,6 +117,8 @@ SSH_GENERATE_KEY = os.getenv("SEWBOT_SSH_GENERATE_KEY", "false").lower() in ("1"
 JOURNALCTL_COMMAND = os.getenv("SEWBOT_JOURNALCTL_COMMAND", "journalctl -f -n 200")
 POWER_OFF_COMMAND = os.getenv("SEWBOT_POWER_OFF_COMMAND", "sudo shutdown -h now")
 
+shell_cwd = os.getcwd()
+
 
 # SSH setup removed in favor of local shell
 
@@ -554,10 +556,12 @@ def handle_ssh_command(data):
 
     def run_cmd(sid, cmd):
         global shell_cwd
-        if cmd.startswith("cd "):
-            target = cmd[3:].strip()
+        if cmd == "cd" or cmd.startswith("cd "):
+            target = cmd[3:].strip() if cmd.startswith("cd ") else "~"
+            if not target:
+                target = "~"
             try:
-                os.chdir(target)
+                os.chdir(os.path.expanduser(target))
                 shell_cwd = os.getcwd()
             except Exception as exc:
                 emit_log(str(exc), source="shell", level="error", sid=sid)
