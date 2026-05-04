@@ -10,6 +10,7 @@
   let feedNonce = Date.now();
   $: feedUrl = `${backendOrigin}/video_feed?ts=${feedNonce}`;
   let feedError = '';
+  let liveFeed = false;
 
   let chatText = '';
 
@@ -25,6 +26,16 @@
   let chatOpen = false;
 
   function reloadFeed(){ feedError=''; feedNonce = Date.now(); }
+
+  // Set liveFeed true when feed loads, false when error
+  function handleFeedLoad() {
+    feedError = '';
+    liveFeed = true;
+  }
+  function handleFeedError() {
+    feedError = 'Video feed unavailable';
+    liveFeed = false;
+  }
 
   function nowTs(){
     const d = new Date();
@@ -74,11 +85,16 @@
             <div class="brand-sub">ROBOTIC CONTROLLER</div>
           </div>
           <div class="overlay-status">
-            <span class="pill" class:online={status==='Online'}>{status}</span>
-            <span class="pill muted">LIVE_FEED</span>
+            <span class="pill live-feed-indicator {liveFeed ? 'live' : 'not-live'}">
+              {#if liveFeed}
+                <span class="blinking-dot"></span> LIVE
+              {:else}
+                <span class="not-live-dot"></span> NOT LIVE
+              {/if}
+            </span>
           </div>
         </div>
-        <img src={feedUrl} alt="camera feed" class="video-element" on:error={() => (feedError = 'Video feed unavailable')} on:load={() => (feedError='')} />
+        <img src={feedUrl} alt="camera feed" class="video-element" on:error={handleFeedError} on:load={handleFeedLoad} />
         <div class="telemetry">
           <div class="telem-item">FPS <strong>{fps}</strong></div>
           <div class="telem-item">Latency <strong>{latency}ms</strong></div>
@@ -216,6 +232,51 @@
     color:var(--sb-text);
   }
   .pill.muted{color:var(--sb-muted)}
+  .pill.live-feed-indicator {
+    position: relative;
+    color: #fff;
+    background: #2d1b1b;
+    border: 1px solid #ef4444;
+    font-weight: bold;
+    box-shadow: 0 0 8px 2px rgba(239,68,68,0.25);
+    min-width: 90px;
+    justify-content: center;
+  }
+  .pill.live-feed-indicator.live {
+    color: #fff;
+    background: #2d1b1b;
+    border: 1px solid #ef4444;
+  }
+  .pill.live-feed-indicator.not-live {
+    color: #bbb;
+    background: #222;
+    border: 1px solid #444;
+    box-shadow: none;
+  }
+  .blinking-dot {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: #ef4444;
+    margin-right: 7px;
+    box-shadow: 0 0 8px 2px #ef4444;
+    animation: blink 1s steps(2, start) infinite;
+    vertical-align: middle;
+  }
+  .not-live-dot {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: #888;
+    margin-right: 7px;
+    vertical-align: middle;
+    box-shadow: none;
+  }
+  @keyframes blink {
+    to { visibility: hidden; }
+  }
   .pill.online{border-color:var(--sb-accent); color:var(--sb-accent)}
 
   .main-grid{display:grid;grid-template-columns:1fr;gap:0;flex:1;min-height:0;position:relative;overflow:visible}
@@ -289,7 +350,18 @@
   .control-pad-overlay{display:grid;grid-template-columns:1fr 1fr 1fr auto auto;gap:12px;align-items:end;padding:12px;position:absolute;bottom:0;left:0;right:0;background:linear-gradient(180deg, rgba(15,15,15,0), rgba(15,15,15,0.72));-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px) saturate(110%);border-top:1px solid rgba(255,255,255,0.03);z-index:10}
   .section-title{font-size:11px;letter-spacing:0.14em;text-transform:uppercase;color:var(--sb-muted);margin-bottom:10px}
 
-  .dpad{display:grid;grid-template-columns:48px 48px 48px;grid-template-rows:48px 48px 48px;gap:6px;place-items:center}
+  .dpad{
+    display:grid;
+    grid-template-columns:48px 48px 48px;
+    grid-template-rows:48px 48px 48px;
+    gap:6px;
+    place-items:center;
+    background:rgba(26,26,26,0.8);
+    border:1px solid var(--sb-border);
+    border-radius:var(--sb-radius);
+    padding:10px;
+    box-shadow:0 2px 12px 0 rgba(0,0,0,0.18);
+  }
   .dpad-btn{width:48px;height:48px;border-radius:8px;border:1px solid var(--sb-border);background:var(--sb-bubble);display:flex;align-items:center;justify-content:center;cursor:pointer;color:#fff}
   .dpad-btn svg{width:18px;height:18px}
   .dpad-btn:active{background:#2f2f2f}
