@@ -193,6 +193,8 @@
     display:flex;
     flex-direction:column;
     height:100vh;
+    height:100svh;
+    min-height:100svh;
     padding:10px;
     gap:0;
     background:var(--sb-bg);

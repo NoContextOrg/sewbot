@@ -5,6 +5,7 @@ import shutil
 import subprocess
 import select
 import os
+import threading
 from config import CAMERA_WIDTH, CAMERA_HEIGHT, CAMERA_FPS, CAMERA_BUFFER_GRABS, MAX_READ_RETRIES
 import logging
 
@@ -23,6 +24,7 @@ except ImportError:
     Picamera2 = None
 
 camera = None
+camera_lock = threading.RLock()
 _printed_picamera2_hint = False
 _printed_runtime_diagnostics = False
 
@@ -66,6 +68,11 @@ class PiCameraAdapter:
             self._cam.stop()
         except Exception:
             pass
+        try:
+            self._cam.close()
+        except Exception:
+            pass
+        self._cam = None
 
 
 class RpicamMjpegAdapter:
@@ -167,10 +174,6 @@ class RpicamMjpegAdapter:
                 self._proc.kill()
             except Exception:
                 pass
-        try:
-            self._cam.close()
-        except Exception:
-            pass
 
 
 def _configure_v4l2(cam):
@@ -236,79 +239,87 @@ def init_camera():
     global camera
     global _printed_picamera2_hint
 
-    _print_runtime_diagnostics_once()
+    with camera_lock:
+        _print_runtime_diagnostics_once()
 
-    if camera is not None:
-        _release_camera(camera)
+        if camera is not None:
+            _release_camera(camera)
+            camera = None
 
-    if Picamera2 is None and not _printed_picamera2_hint:
-        log.warning(
-            "Picamera2 import unavailable. If using a venv on Raspberry Pi OS, use system Python or recreate it with --system-site-packages."
-        )
-        _printed_picamera2_hint = True
+        if Picamera2 is None and not _printed_picamera2_hint:
+            log.warning(
+                "Picamera2 import unavailable. If using a venv on Raspberry Pi OS, use system Python or recreate it with --system-site-packages."
+            )
+            _printed_picamera2_hint = True
 
-    attempts = []
+        attempts = []
 
-    if Picamera2 is not None:
-        attempts.append(("Picamera2", lambda: PiCameraAdapter(CAMERA_WIDTH, CAMERA_HEIGHT)))
-    elif shutil.which("rpicam-vid") is not None:
-        attempts.append(("Rpicam MJPEG", lambda: RpicamMjpegAdapter(CAMERA_WIDTH, CAMERA_HEIGHT, CAMERA_FPS)))
+        if Picamera2 is not None:
+            attempts.append(("Picamera2", lambda: PiCameraAdapter(CAMERA_WIDTH, CAMERA_HEIGHT)))
+        elif shutil.which("rpicam-vid") is not None:
+            attempts.append(("Rpicam MJPEG", lambda: RpicamMjpegAdapter(CAMERA_WIDTH, CAMERA_HEIGHT, CAMERA_FPS)))
 
-    attempts.extend([
-        (
-            "Libcamera GStreamer",
-            lambda: cv2.VideoCapture(
-                f"libcamerasrc ! video/x-raw,width={CAMERA_WIDTH},height={CAMERA_HEIGHT},framerate={CAMERA_FPS}/1,format=BGR ! appsink drop=true max-buffers=1 sync=false",
-                cv2.CAP_GSTREAMER,
+        attempts.extend([
+            (
+                "Libcamera GStreamer",
+                lambda: cv2.VideoCapture(
+                    f"libcamerasrc ! video/x-raw,width={CAMERA_WIDTH},height={CAMERA_HEIGHT},framerate={CAMERA_FPS}/1,format=BGR ! appsink drop=true max-buffers=1 sync=false",
+                    cv2.CAP_GSTREAMER,
+                ),
             ),
-        ),
-    ])
+        ])
 
-    # V4L2 and generic index0 attempts removed because on Bookworm/Trixie /dev/video0 is an ISP codec which instantly hard-locks the C++ thread.
+        # V4L2 and generic index0 attempts removed because on Bookworm/Trixie /dev/video0 is an ISP codec which instantly hard-locks the C++ thread.
 
-    for backend_name, open_camera in attempts:
-        try:
-            cam = open_camera()
-        except Exception as exc:
-            log.warning("%s open threw exception: %s", backend_name, exc)
-            continue
+        for backend_name, open_camera in attempts:
+            try:
+                cam = open_camera()
+            except Exception as exc:
+                log.warning("%s open threw exception: %s", backend_name, exc)
+                continue
 
-        if hasattr(cam, "set"):
-            cam.set(cv2.CAP_PROP_BUFFERSIZE, 1)
-        if backend_name.startswith("V4L2"):
-            _configure_v4l2(cam)
+            if hasattr(cam, "set"):
+                cam.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+            if backend_name.startswith("V4L2"):
+                _configure_v4l2(cam)
 
-        if not cam.isOpened():
-            log.warning("%s open failed.", backend_name)
+            if not cam.isOpened():
+                log.warning("%s open failed.", backend_name)
+                _release_camera(cam)
+                continue
+
+            _warmup_camera(cam)
+            success, _ = cam.read()
+            if success:
+                camera = cam
+                log.info("Camera initialized using %s.", backend_name)
+                return True
+
+            log.warning("%s opened but did not return frames.", backend_name)
             _release_camera(cam)
-            continue
 
-        _warmup_camera(cam)
-        success, _ = cam.read()
-        if success:
-            camera = cam
-            log.info("Camera initialized using %s.", backend_name)
-            return True
-
-        log.warning("%s opened but did not return frames.", backend_name)
-        _release_camera(cam)
-
-    camera = None
-    return False
+        camera = None
+        return False
 
 
 def read_frame_with_retries(max_retries=MAX_READ_RETRIES):
     global camera
 
     for attempt in range(1, max_retries + 1):
-        if camera is None or not camera.isOpened():
-            log.warning("Camera unavailable, attempting reinitialization...")
-            if not init_camera():
-                time.sleep(0.2)
-                continue
+        with camera_lock:
+            if camera is None or not camera.isOpened():
+                log.warning("Camera unavailable, attempting reinitialization...")
+                if not init_camera():
+                    success = False
+                elif camera is None or not camera.isOpened():
+                    success = False
+                else:
+                    _drain_camera_buffer(camera)
+                    success, frame = camera.read()
+            else:
+                _drain_camera_buffer(camera)
+                success, frame = camera.read()
 
-        _drain_camera_buffer(camera)
-        success, frame = camera.read()
         if success:
             return True, frame
 
