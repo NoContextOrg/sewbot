@@ -227,9 +227,9 @@
 
   .main-grid{display:grid;grid-template-columns:1fr;gap:0;flex:1;min-height:0;position:relative;overflow:visible}
 
-  .video-wrap{display:flex;flex-direction:column;gap:0;justify-self:stretch;align-self:stretch;width:100%;height:100%}
-  .video-stage{position:relative;border-radius:var(--sb-radius);overflow:hidden;background:#0a0a0a;border:1px solid var(--sb-border);flex:1;display:flex;align-items:center;justify-content:center;width:100%;height:80vh;max-height:80vh;}
-  .video-element{width:100%;height:100%;object-fit:contain;display:block;background:#0a0a0a}
+  .video-wrap{display:flex;flex-direction:column;gap:0;justify-self:stretch;align-self:stretch;width:100%;height:100%;min-height:0;}
+  .video-stage{position:relative;border-radius:var(--sb-radius);overflow:hidden;background:#0a0a0a;border:1px solid var(--sb-border);flex:1;display:flex;align-items:center;justify-content:center;width:100%;height:100%;max-height:100%;min-height:0;}
+  .video-element{width:100%;height:100%;object-fit:cover;display:block;background:#0a0a0a}
   .overlay-head{position:absolute;left:10px;right:10px;top:10px;display:flex;justify-content:space-between;align-items:flex-start;gap:12px;z-index:6}
   .overlay-brand{background:rgba(26,26,26,0.85);border:1px solid var(--sb-border);border-radius:var(--sb-radius);padding:6px 8px;display:flex;flex-direction:column;gap:2px}
   .overlay-status{display:flex;gap:8px;align-items:center;background:rgba(26,26,26,0.85);border:1px solid var(--sb-border);border-radius:var(--sb-radius);padding:6px 8px}
