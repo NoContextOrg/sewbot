@@ -72,21 +72,19 @@
 </script>
 
 <div class="viewport">
-  <header class="topbar">
-    <div class="brand">
-      <div class="brand-name">Sewbot</div>
-      <div class="brand-sub">ROBOTIC CONTROLLER</div>
-    </div>
-    <div class="status">
-      <span class="pill" class:online={status==='Online'}>{status}</span>
-      <span class="pill muted">LIVE_FEED</span>
-    </div>
-  </header>
-
   <main class="main-grid">
     <section class="video-wrap">
       <div class="video-stage" aria-label="Sewbot camera feed">
-        <div class="video-label">LIVE_FEED_01</div>
+        <div class="overlay-head">
+          <div class="overlay-brand">
+            <div class="brand-name">Sewbot</div>
+            <div class="brand-sub">ROBOTIC CONTROLLER</div>
+          </div>
+          <div class="overlay-status">
+            <span class="pill" class:online={status==='Online'}>{status}</span>
+            <span class="pill muted">LIVE_FEED</span>
+          </div>
+        </div>
         <img src={feedUrl} alt="camera feed" class="video-element" on:error={() => (feedError = 'Video feed unavailable')} on:load={() => (feedError='')} />
         <div class="telemetry">
           <div class="telem-item">FPS <strong>{fps}</strong></div>
@@ -202,21 +200,11 @@
     display:flex;
     flex-direction:column;
     height:100vh;
-    padding:14px;
-    gap:10px;
+    padding:10px;
+    gap:0;
     background:var(--sb-bg);
     color:var(--sb-text);
     font-family:var(--sb-sans);
-  }
-
-  .topbar{
-    display:flex;
-    justify-content:space-between;
-    align-items:center;
-    padding:12px 14px;
-    border-radius:var(--sb-radius);
-    background:var(--sb-panel);
-    border:1px solid var(--sb-border);
   }
 
   .brand{display:flex;flex-direction:column;gap:2px}
@@ -240,13 +228,15 @@
   .pill.muted{color:var(--sb-muted)}
   .pill.online{border-color:var(--sb-accent); color:var(--sb-accent)}
 
-  .main-grid{display:grid;grid-template-columns:1fr;gap:0;flex:1;min-height:0;position:relative;overflow:hidden}
+  .main-grid{display:grid;grid-template-columns:1fr;gap:0;flex:1;min-height:0;position:relative;overflow:visible}
 
   .video-wrap{display:flex;flex-direction:column;gap:0;justify-self:stretch;align-self:stretch;width:100%;height:100%}
-  .video-stage{position:relative;border-radius:var(--sb-radius);overflow:visible;background:#0a0a0a;border:1px solid var(--sb-border);aspect-ratio:var(--sb-camera-aspect);flex:1;display:flex;align-items:center;justify-content:center;width:100%;max-height:none}
-  .video-element{width:100%;height:100%;object-fit:contain;display:block;background:#0a0a0a}
-  .video-label{position:absolute;left:10px;top:10px;background:var(--sb-panel);border:1px solid var(--sb-border);border-radius:var(--sb-radius);padding:6px 8px;font-size:12px;letter-spacing:0.12em;text-transform:uppercase;color:var(--sb-muted);z-index:5}
-  .telemetry{position:absolute;right:10px;top:10px;display:flex;gap:16px;background:rgba(26,26,26,0.8);border:1px solid var(--sb-border);border-radius:var(--sb-radius);padding:8px 12px;font-size:11px;letter-spacing:0.08em;text-transform:uppercase;color:var(--sb-muted);z-index:5}
+  .video-stage{position:relative;border-radius:var(--sb-radius);overflow:hidden;background:#0a0a0a;border:1px solid var(--sb-border);flex:1;display:flex;align-items:center;justify-content:center;width:100%;height:100%;min-height:clamp(360px, 70vh, 900px)}
+  .video-element{width:100%;height:100%;object-fit:cover;display:block;background:#0a0a0a}
+  .overlay-head{position:absolute;left:10px;right:10px;top:10px;display:flex;justify-content:space-between;align-items:flex-start;gap:12px;z-index:6}
+  .overlay-brand{background:rgba(26,26,26,0.85);border:1px solid var(--sb-border);border-radius:var(--sb-radius);padding:6px 8px;display:flex;flex-direction:column;gap:2px}
+  .overlay-status{display:flex;gap:8px;align-items:center;background:rgba(26,26,26,0.85);border:1px solid var(--sb-border);border-radius:var(--sb-radius);padding:6px 8px}
+  .telemetry{position:absolute;right:10px;top:62px;display:flex;gap:16px;background:rgba(26,26,26,0.8);border:1px solid var(--sb-border);border-radius:var(--sb-radius);padding:8px 12px;font-size:11px;letter-spacing:0.08em;text-transform:uppercase;color:var(--sb-muted);z-index:5}
   .telem-item{display:flex;gap:4px;align-items:center}
   .telem-item strong{color:var(--sb-accent);font-weight:700}
   .video-error{position:absolute;left:50%;top:10px;transform:translateX(-50%);background:var(--sb-panel);border:1px solid var(--sb-border);border-radius:var(--sb-radius);padding:8px 10px;font-size:12px;color:var(--sb-text);z-index:12}

@@ -27,24 +27,35 @@
   const socket = io(backendOrigin || undefined, {
     transports: ["websocket", "polling"],
     reconnection: true,
+    autoConnect: false,
   });
 
   let status = "Offline";
 
+  const handleConnect = () => {
+    status = "Online";
+  };
+
+  const handleDisconnect = () => {
+    status = "Offline";
+  };
+
+  const handleError = () => {
+    status = "Offline";
+  };
+
   onMount(() => {
-    socket.on("connect", () => {
-      status = "Online";
-    });
+    socket.on("connect", handleConnect);
+    socket.on("disconnect", handleDisconnect);
+    socket.on("connect_error", handleError);
 
-    socket.on("disconnect", () => {
-      status = "Offline";
-    });
-
-    socket.on("connect_error", () => {
-      status = "Offline";
-    });
+    socket.connect();
+    status = socket.connected ? "Online" : "Offline";
 
     return () => {
+      socket.off("connect", handleConnect);
+      socket.off("disconnect", handleDisconnect);
+      socket.off("connect_error", handleError);
       socket.disconnect();
     };
   });
