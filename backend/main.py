@@ -49,23 +49,28 @@ class SocketIOLogHandler(logging.Handler):
 
 
 def _setup_logging():
-    logger = logging.getLogger("sewbot")
-    if logger.handlers:
-        return logger
+    root_logger = logging.getLogger()
+    if root_logger.handlers:
+        return logging.getLogger("sewbot")
 
-    logger.setLevel(logging.INFO)
-    logger.propagate = False
+    root_logger.setLevel(logging.INFO)
+    
+    logging.getLogger("werkzeug").setLevel(logging.WARNING)
+    logging.getLogger("engineio").setLevel(logging.WARNING)
+    logging.getLogger("socketio").setLevel(logging.WARNING)
+    logging.getLogger("paramiko.transport").setLevel(logging.WARNING)
+
     formatter = logging.Formatter("%(asctime)s %(levelname)s %(message)s", "%H:%M:%S")
 
     stream_handler = logging.StreamHandler()
     stream_handler.setFormatter(formatter)
-    logger.addHandler(stream_handler)
+    root_logger.addHandler(stream_handler)
 
     socket_handler = SocketIOLogHandler(socketio)
     socket_handler.setFormatter(formatter)
-    logger.addHandler(socket_handler)
+    root_logger.addHandler(socket_handler)
 
-    return logger
+    return logging.getLogger("sewbot")
 
 
 log = _setup_logging()
@@ -744,12 +749,13 @@ def handle_ssh_command(data):
         emit_log("SSH command blocked by policy", source="ssh", level="error", sid=request.sid)
         return
 
-    session = _get_ssh_session(request.sid)
-    if not session:
-        return
+    def run_cmd(sid, cmd):
+        session = _get_ssh_session(sid)
+        if not session:
+            return
+        session.send(cmd)
 
-    emit_log(f"$ {command}", source="ssh", level="info", sid=request.sid)
-    session.send(command)
+    socketio.start_background_task(run_cmd, request.sid, command)
 
 
 @socketio.on("power_off")
@@ -762,12 +768,20 @@ def handle_power_off():
         emit_log("Power off command blocked by policy", source="power", level="error", sid=request.sid)
         return
 
-    session = _get_ssh_session(request.sid)
-    if not session:
-        return
+    def run_power_off(sid):
+        session = _get_ssh_session(sid)
+        if not session:
+            return
+        emit_log("Power off requested", source="power", level="warning", sid=sid)
+        session.send(POWER_OFF_COMMAND)
+        
+        # If the shutdown command asks for sudo password, blind-send it.
+        if SSH_PASSWORD:
+            socketio.sleep(0.5)
+            session.send(SSH_PASSWORD)
+            emit_log("Sudo password sent for shutdown...", source="power", level="warning", sid=sid)
 
-    emit_log("Power off requested", source="power", level="warning", sid=request.sid)
-    session.send(POWER_OFF_COMMAND)
+    socketio.start_background_task(run_power_off, request.sid)
 
 @socketio.on('move')
 def handle_move(data):
