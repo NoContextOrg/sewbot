@@ -8,6 +8,13 @@ import cv2
 import glob
 import logging
 import os
+
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
+
 import select
 import shutil
 import subprocess
@@ -17,7 +24,6 @@ import time
 import numpy as np
 from flask import Flask, Response, send_from_directory, request
 from flask_socketio import SocketIO
-import paramiko
 
 try:
     from picamera2 import Picamera2  # type: ignore[import-not-found]
@@ -58,7 +64,6 @@ def _setup_logging():
     logging.getLogger("werkzeug").setLevel(logging.WARNING)
     logging.getLogger("engineio").setLevel(logging.WARNING)
     logging.getLogger("socketio").setLevel(logging.WARNING)
-    logging.getLogger("paramiko.transport").setLevel(logging.WARNING)
 
     formatter = logging.Formatter("%(asctime)s %(levelname)s %(message)s", "%H:%M:%S")
 
@@ -98,7 +103,7 @@ def emit_log(text, source="backend", level="info", sid=None):
         socketio.emit("log", payload)
 
 
-SSH_TARGET = os.getenv("SEWBOT_SSH_TARGET", "sewbot@sewbot.local")
+SSH_TARGET = os.getenv("SEWBOT_SSH_TARGET", "sewbot@127.0.0.1")
 SSH_HOST = os.getenv("SEWBOT_SSH_HOST", "").strip()
 SSH_PORT = int(os.getenv("SEWBOT_SSH_PORT", "22"))
 SSH_USER = os.getenv("SEWBOT_SSH_USER", "").strip()
@@ -113,42 +118,7 @@ JOURNALCTL_COMMAND = os.getenv("SEWBOT_JOURNALCTL_COMMAND", "journalctl -f -n 20
 POWER_OFF_COMMAND = os.getenv("SEWBOT_POWER_OFF_COMMAND", "sudo shutdown -h now")
 
 
-def _parse_ssh_target(target):
-    value = target.strip()
-    if value.startswith("ssh "):
-        value = value[4:].strip()
-
-    user = ""
-    host_port = value
-    if "@" in value:
-        user, host_port = value.split("@", 1)
-
-    host = host_port
-    port = None
-    if host_port.count(":") == 1:
-        host, port_str = host_port.rsplit(":", 1)
-        if port_str.isdigit():
-            port = int(port_str)
-
-    return user, host, port
-
-
-def _resolve_ssh_config():
-    global SSH_HOST, SSH_PORT, SSH_USER
-    if SSH_HOST and SSH_USER:
-        return
-
-    user, host, port = _parse_ssh_target(SSH_TARGET)
-    if not SSH_HOST:
-        SSH_HOST = host or "sewbot.local"
-    if not SSH_USER:
-        SSH_USER = user or "sewbot"
-    if port and not os.getenv("SEWBOT_SSH_PORT"):
-        SSH_PORT = port
-
-
-_resolve_ssh_config()
-log.info("SSH target: %s@%s:%s", SSH_USER, SSH_HOST, SSH_PORT)
+# SSH setup removed in favor of local shell
 
 CAMERA_WIDTH = 640
 CAMERA_HEIGHT = 480
@@ -340,59 +310,7 @@ def _gstreamer_enabled_in_opencv():
     return False
 
 
-def _ensure_ssh_key():
-    if not SSH_KEY_PATH:
-        return
-    if os.path.exists(SSH_KEY_PATH):
-        return
-    if not SSH_GENERATE_KEY:
-        return
-
-    directory = os.path.dirname(SSH_KEY_PATH)
-    if directory:
-        os.makedirs(directory, exist_ok=True)
-    key = paramiko.RSAKey.generate(2048)
-    key.write_private_key_file(SSH_KEY_PATH)
-    pub_path = SSH_KEY_PATH + ".pub"
-    with open(pub_path, "w", encoding="utf-8") as handle:
-        handle.write(f"{key.get_name()} {key.get_base64()} sewbot-webui\n")
-
-    log.info("Generated SSH key at %s", SSH_KEY_PATH)
-    log.info("Add this public key to %s authorized_keys: %s", SSH_HOST, pub_path)
-
-
-def _load_ssh_key():
-    if not SSH_KEY_PATH or not os.path.exists(SSH_KEY_PATH):
-        return None
-
-    for key_cls in (paramiko.RSAKey, paramiko.Ed25519Key, paramiko.ECDSAKey):
-        try:
-            return key_cls.from_private_key_file(SSH_KEY_PATH)
-        except Exception:
-            continue
-    return None
-
-
-def _create_ssh_client():
-    if not SSH_HOST:
-        raise RuntimeError("SSH host not configured")
-
-    _ensure_ssh_key()
-    pkey = _load_ssh_key()
-
-    client = paramiko.SSHClient()
-    client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-    client.connect(
-        hostname=SSH_HOST,
-        port=SSH_PORT,
-        username=SSH_USER,
-        password=SSH_PASSWORD or None,
-        pkey=pkey,
-        timeout=10,
-        allow_agent=True,
-        look_for_keys=not bool(pkey),
-    )
-    return client
+# Paramiko removed
 
 
 def _command_allowed(command):
@@ -406,108 +324,8 @@ def _command_allowed(command):
     return any(cleaned == allowed or cleaned.startswith(f"{allowed} ") for allowed in SSH_ALLOWED_COMMANDS)
 
 
-ssh_sessions = {}
-ssh_sessions_lock = threading.Lock()
 journal_stream_lock = threading.Lock()
 journal_stream_active = False
-
-
-class SSHShellSession:
-    def __init__(self, sid):
-        self.sid = sid
-        self.client = _create_ssh_client()
-        self.channel = self.client.invoke_shell()
-        self.channel.settimeout(0.0)
-        self.alive = True
-        self._buffer = ""
-        socketio.start_background_task(self._read_loop)
-
-    def send(self, command):
-        if not self.alive:
-            return
-        data = command.rstrip("\n") + "\n"
-        self.channel.send(data)
-
-    def _read_loop(self):
-        import re
-        ansi_escape = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
-        last_recv_time = time.time()
-        
-        while self.alive:
-            try:
-                if self.channel.recv_ready():
-                    chunk = self.channel.recv(4096)
-                    if not chunk:
-                        break
-                    text = chunk.decode(errors="ignore")
-                    text = ansi_escape.sub('', text)
-                    self._buffer += text
-                    last_recv_time = time.time()
-                    
-                    while True:
-                        if "\n" in self._buffer:
-                            line, self._buffer = self._buffer.split("\n", 1)
-                            line = line.replace("\r", "").strip()
-                            if line:
-                                emit_log(line, source="ssh", level="info", sid=self.sid)
-                        elif "\r" in self._buffer:
-                            line, self._buffer = self._buffer.split("\r", 1)
-                            line = line.strip()
-                            if line:
-                                emit_log(line, source="ssh", level="info", sid=self.sid)
-                        else:
-                            break
-                else:
-                    if self._buffer and (time.time() - last_recv_time) > 0.2:
-                        chk = self._buffer.replace("\r", "").strip()
-                        if chk:
-                            emit_log(chk, source="ssh", level="info", sid=self.sid)
-                        self._buffer = ""
-                        
-                    socketio.sleep(0.05)
-            except Exception as exc:
-                emit_log(f"SSH stream error: {exc}", source="ssh", level="error", sid=self.sid)
-                break
-
-        self.close()
-
-    def close(self):
-        self.alive = False
-        try:
-            if self.channel:
-                self.channel.close()
-        except Exception:
-            pass
-        try:
-            if self.client:
-                self.client.close()
-        except Exception:
-            pass
-
-
-def _get_ssh_session(sid):
-    with ssh_sessions_lock:
-        session = ssh_sessions.get(sid)
-        if session and session.alive:
-            return session
-
-        try:
-            emit_log("Establishing SSH connection...", source="ssh", level="info", sid=sid)
-            session = SSHShellSession(sid)
-            emit_log("SSH connection established.", source="ssh", level="info", sid=sid)
-        except Exception as exc:
-            emit_log(f"SSH connect failed: {exc}", source="ssh", level="error", sid=sid)
-            return None
-
-        ssh_sessions[sid] = session
-        return session
-
-
-def _close_ssh_session(sid):
-    with ssh_sessions_lock:
-        session = ssh_sessions.pop(sid, None)
-    if session:
-        session.close()
 
 
 def _start_journal_stream():
@@ -521,40 +339,25 @@ def _start_journal_stream():
 
 
 def _journal_stream_loop():
-    buffer = ""
     while True:
-        client = None
         try:
-            client = _create_ssh_client()
-            channel = client.get_transport().open_session()
-            channel.get_pty()
-            channel.exec_command(JOURNALCTL_COMMAND)
-            channel.settimeout(0.0)
-
-            while True:
-                if channel.exit_status_ready():
-                    break
-                if channel.recv_ready():
-                    chunk = channel.recv(4096)
-                    if not chunk:
-                        break
-                    text = chunk.decode(errors="ignore")
-                    buffer += text
-                    while "\n" in buffer:
-                        line, buffer = buffer.split("\n", 1)
-                        if line.strip():
-                            emit_log(line.rstrip(), source="journal", level="info")
-                else:
-                    socketio.sleep(0.2)
+            proc = subprocess.Popen(
+                JOURNALCTL_COMMAND,
+                shell=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                bufsize=1
+            )
+            for line in iter(proc.stdout.readline, ""):
+                if line:
+                    emit_log(line.replace('\r', '').strip(), source="journal", level="info")
+            proc.stdout.close()
+            proc.wait()
+            socketio.sleep(2)
         except Exception as exc:
             emit_log(f"Journal stream error: {exc}", source="journal", level="error")
-            socketio.sleep(2)
-        finally:
-            try:
-                if client:
-                    client.close()
-            except Exception:
-                pass
+            socketio.sleep(5)
 
 
 def _print_runtime_diagnostics_once():
@@ -733,7 +536,7 @@ def handle_connect():
 
 @socketio.on("disconnect")
 def handle_disconnect():
-    _close_ssh_session(request.sid)
+    pass
 
 
 @socketio.on("ssh_command")
@@ -750,10 +553,33 @@ def handle_ssh_command(data):
         return
 
     def run_cmd(sid, cmd):
-        session = _get_ssh_session(sid)
-        if not session:
+        global shell_cwd
+        if cmd.startswith("cd "):
+            target = cmd[3:].strip()
+            try:
+                os.chdir(target)
+                shell_cwd = os.getcwd()
+            except Exception as exc:
+                emit_log(str(exc), source="shell", level="error", sid=sid)
             return
-        session.send(cmd)
+            
+        try:
+            proc = subprocess.Popen(
+                cmd,
+                shell=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                bufsize=1,
+                cwd=shell_cwd
+            )
+            for line in iter(proc.stdout.readline, ""):
+                if line:
+                    emit_log(line.replace('\r', '').strip(), source="shell", level="info", sid=sid)
+            proc.stdout.close()
+            proc.wait()
+        except Exception as exc:
+            emit_log(str(exc), source="shell", level="error", sid=sid)
 
     socketio.start_background_task(run_cmd, request.sid, command)
 
@@ -769,17 +595,17 @@ def handle_power_off():
         return
 
     def run_power_off(sid):
-        session = _get_ssh_session(sid)
-        if not session:
-            return
         emit_log("Power off requested", source="power", level="warning", sid=sid)
-        session.send(POWER_OFF_COMMAND)
-        
-        # If the shutdown command asks for sudo password, blind-send it.
-        if SSH_PASSWORD:
+        cmd = POWER_OFF_COMMAND
+        if SSH_PASSWORD and "sudo " in cmd:
+            cmd = cmd.replace("sudo ", f"echo {SSH_PASSWORD} | sudo -S ")
+            
+        try:
+            subprocess.run(cmd, shell=True)
             socketio.sleep(0.5)
-            session.send(SSH_PASSWORD)
-            emit_log("Sudo password sent for shutdown...", source="power", level="warning", sid=sid)
+            emit_log("Shutdown command successfully dispatched.", source="power", level="warning", sid=sid)
+        except Exception as exc:
+            emit_log(f"Shutdown failed: {exc}", source="power", level="error", sid=sid)
 
     socketio.start_background_task(run_power_off, request.sid)
 
