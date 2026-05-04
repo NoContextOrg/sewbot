@@ -12,6 +12,7 @@ CAMERA_FPS = 15
 CAMERA_JPEG_QUALITY = int(os.getenv("CAMERA_JPEG_QUALITY", "40"))
 CAMERA_BUFFER_GRABS = int(os.getenv("CAMERA_BUFFER_GRABS", "2"))
 MAX_READ_RETRIES = 5
+CAMERA_KILL_STALE = os.getenv("SEWBOT_CAMERA_KILL_STALE", "true").lower() in ("1", "true", "yes", "on")
 
 JOURNALCTL_COMMAND = os.getenv("SEWBOT_JOURNALCTL_COMMAND", "journalctl -f -n 200")
 POWER_OFF_COMMAND = os.getenv("SEWBOT_POWER_OFF_COMMAND", "sudo shutdown -h now")

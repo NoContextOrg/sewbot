@@ -6,7 +6,7 @@ import subprocess
 import select
 import os
 import threading
-from config import CAMERA_WIDTH, CAMERA_HEIGHT, CAMERA_FPS, CAMERA_BUFFER_GRABS, MAX_READ_RETRIES
+from config import CAMERA_WIDTH, CAMERA_HEIGHT, CAMERA_FPS, CAMERA_BUFFER_GRABS, MAX_READ_RETRIES, CAMERA_KILL_STALE
 import logging
 
 log = logging.getLogger("sewbot")
@@ -232,6 +232,33 @@ def _print_runtime_diagnostics_once():
     log.info("Detected V4L2 nodes: %s", video_nodes if video_nodes else "none")
 
 
+def _kill_stale_camera_processes():
+    if not CAMERA_KILL_STALE:
+        return
+    if not sys.platform.startswith("linux"):
+        return
+    if shutil.which("pkill") is None:
+        log.warning("pkill not found; skipping stale camera cleanup")
+        return
+
+    killed_any = False
+    for name in ("rpicam-vid", "libcamera-vid", "libcamera-still", "libcamera-hello"):
+        try:
+            result = subprocess.run(
+                ["pkill", "-f", name],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+            if result.returncode == 0:
+                killed_any = True
+        except Exception:
+            pass
+
+    if killed_any:
+        log.warning("Killed stale camera processes to release pipeline.")
+        time.sleep(0.2)
+
+
 def _warmup_camera(cam, frames=20):
     log.info("Warming up camera sensor...")
     for _ in range(frames):
@@ -245,6 +272,7 @@ def init_camera():
 
     with camera_lock:
         _print_runtime_diagnostics_once()
+        _kill_stale_camera_processes()
 
         if camera is not None:
             _release_camera(camera)
