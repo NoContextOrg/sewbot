@@ -142,7 +142,36 @@ function handleConveyor(action) {
 
 <div class="viewport">
   <main class="main-grid">
-        <footer class="control-pad-overlay control-sections">
+    <section class="video-wrap">
+      <div class="video-stage">
+        <div class="overlay-head">
+          <div class="overlay-brand">
+            <div class="brand-name">SEWBOT</div>
+            <div class="brand-sub">ROBOTIC CONTROLLER</div>
+          </div>
+          <div class="overlay-status">
+            <span class="pill live-feed-indicator {liveFeed ? 'live' : 'not-live'}">
+              {#if liveFeed}
+                <span class="blinking-dot"></span> LIVE
+              {:else}
+                <span class="not-live-dot"></span> NOT LIVE
+              {/if}
+            </span>
+          </div>
+        </div>
+        <img src={feedUrl} alt="camera feed" class="video-element" on:error={handleFeedError} on:load={handleFeedLoad} />
+        <div class="telemetry">
+          <div class="telem-item">FPS <strong>{fps}</strong></div>
+          <div class="telem-item">Latency <strong>{latency}ms</strong></div>
+          <div class="telem-item">Bitrate <strong>{bitrate.toFixed(1)}Mb/s</strong></div>
+        </div>
+        {#if feedError}
+          <div class="video-error">{feedError} <button type="button" class="link" on:click={reloadFeed}>Retry</button></div>
+        {/if}
+      </div>
+    </section>
+
+    <footer class="control-pad-overlay control-sections">
           <div class="control-section">
             <div class="section-title">MOVEMENT</div>
             <div class="dpad">
@@ -207,9 +236,19 @@ function handleConveyor(action) {
 
           <div class="control-section">
             <div class="section-title">CONVEYOR</div>
-            <div class="control-row">
+            <div class="control-row" style="display:flex; gap:8px">
               <button class="action-btn" on:click={() => handleConveyor('on')}>On</button>
               <button class="action-btn" on:click={() => handleConveyor('off')}>Off</button>
+            </div>
+          </div>
+
+          <div class="control-section">
+            <div class="section-title">SYSTEM</div>
+            <div class="control-row" style="display:flex; gap:8px; align-items:center;">
+              <button class="btn-power" title="Power off" on:click={confirmPowerOff}>POWER</button>
+              <button class="btn-chat" title="Toggle system log" on:click={() => chatOpen = !chatOpen}>
+                {#if chatOpen}✕{:else}☰{/if}
+              </button>
             </div>
           </div>
         </footer>
@@ -405,9 +444,10 @@ function handleConveyor(action) {
   .btn-power:active{background:#7F1D1D}
 
   .control-pad-overlay{
-    display:grid;
-    grid-template-columns:1fr 1fr 1fr auto auto;
-    gap:12px;
+    display:flex;
+    flex-wrap:wrap;
+    justify-content:space-between;
+    gap:16px;
     align-items:end;
     padding:12px;
     position:absolute;
@@ -451,7 +491,7 @@ function handleConveyor(action) {
   input[type='range']{width:100%;accent-color:var(--sb-accent)}
 
   @media (max-width: 1100px){
-    .control-pad-overlay{grid-template-columns:1fr}
+    .control-pad-overlay{justify-content:center}
     .chat-modal{width:min(90vw, 320px)}
   }
 </style>
