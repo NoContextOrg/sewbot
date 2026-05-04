@@ -1,3 +1,9 @@
+try:
+    import gevent.monkey
+    gevent.monkey.patch_all()
+except ImportError:
+    pass
+
 import cv2
 import glob
 import logging
@@ -65,12 +71,22 @@ def _setup_logging():
 log = _setup_logging()
 
 
+MAX_LOG_HISTORY = 100
+log_history = []
+log_history_lock = threading.Lock()
+
 def emit_log(text, source="backend", level="info", sid=None):
     payload = {
         "text": text,
         "level": level,
         "source": source,
     }
+    
+    with log_history_lock:
+        log_history.append(payload)
+        if len(log_history) > MAX_LOG_HISTORY:
+            log_history.pop(0)
+
     if sid:
         socketio.emit("log", payload, to=sid)
     else:
@@ -408,6 +424,8 @@ class SSHShellSession:
         self.channel.send(data)
 
     def _read_loop(self):
+        import re
+        ansi_escape = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
         while self.alive:
             try:
                 if self.channel.recv_ready():
@@ -415,11 +433,27 @@ class SSHShellSession:
                     if not chunk:
                         break
                     text = chunk.decode(errors="ignore")
+                    text = ansi_escape.sub('', text)
                     self._buffer += text
-                    while "\n" in self._buffer:
-                        line, self._buffer = self._buffer.split("\n", 1)
-                        if line.strip():
-                            emit_log(line.rstrip(), source="ssh", level="info", sid=self.sid)
+                    
+                    while True:
+                        if "\n" in self._buffer:
+                            line, self._buffer = self._buffer.split("\n", 1)
+                            line = line.replace("\r", "").strip()
+                            if line:
+                                emit_log(line, source="ssh", level="info", sid=self.sid)
+                        elif "\r" in self._buffer:
+                            line, self._buffer = self._buffer.split("\r", 1)
+                            line = line.strip()
+                            if line:
+                                emit_log(line, source="ssh", level="info", sid=self.sid)
+                        else:
+                            break
+                            
+                    chk = self._buffer.strip()
+                    if chk and (chk.endswith("$") or chk.endswith("#") or chk.endswith(">") or chk.endswith(":~")):
+                        emit_log(chk, source="ssh", level="info", sid=self.sid)
+                        self._buffer = ""
                 else:
                     socketio.sleep(0.05)
             except Exception as exc:
@@ -678,6 +712,11 @@ def video_feed():
 @socketio.on("connect")
 def handle_connect():
     _start_journal_stream()
+    
+    with log_history_lock:
+        for payload in log_history:
+            socketio.emit("log", payload, to=request.sid)
+
     emit_log("Client connected", source="backend", level="info", sid=request.sid)
 
 

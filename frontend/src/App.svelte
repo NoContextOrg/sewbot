@@ -86,10 +86,14 @@
 
   // Keyboard Listeners
   window.onkeydown = (e) => {
+    if (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA") return;
     const key = e.key.toLowerCase();
     if (["w","a","s","d"].includes(key)) sendMove(key);
   };
-  window.onkeyup = () => sendMove("stop");
+  window.onkeyup = (e) => {
+    if (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA") return;
+    sendMove("stop");
+  };
 
   function handleBubble(e){
     appendMessage({ text: e.detail.text, cls: e.detail.cls, ts: e.detail.ts });
