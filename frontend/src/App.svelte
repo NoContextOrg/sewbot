@@ -102,7 +102,7 @@
   function handleCommand(e){
     const command = e.detail.text;
     if (!command) return;
-    socket.emit("ssh_command", { command });
+    socket.emit("shell_command", { command });
     appendMessage({ text: `$ ${command}`, cls: "user", ts: nowTs() });
   }
 

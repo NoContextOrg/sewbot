@@ -157,7 +157,7 @@
         <div class="chat-input">
           <input
             bind:value={chatText}
-            placeholder="SSH command..."
+            placeholder="Shell command..."
             on:keydown={(e) => {
               if (e.key === 'Enter') {
                 submitCommand();
