@@ -195,6 +195,7 @@
     --sb-radius:4px;
     --sb-sans: Inter, "Helvetica Neue", system-ui, "Segoe UI", Roboto, Arial, sans-serif;
     --sb-mono: "JetBrains Mono", "Roboto Mono", ui-monospace, Consolas, monospace;
+    --sb-camera-aspect: 4 / 3;
   }
 
   .viewport{
@@ -242,7 +243,7 @@
   .main-grid{display:grid;grid-template-columns:1fr;gap:0;flex:1;min-height:0;position:relative;overflow:hidden}
 
   .video-wrap{display:flex;flex-direction:column;gap:0;justify-self:stretch;align-self:stretch;width:100%;height:100%}
-  .video-stage{position:relative;border-radius:var(--sb-radius);overflow:visible;background:#0a0a0a;border:1px solid var(--sb-border);aspect-ratio:16/9;flex:1;display:flex;align-items:center;justify-content:center;width:100%;max-height:80vh}
+  .video-stage{position:relative;border-radius:var(--sb-radius);overflow:visible;background:#0a0a0a;border:1px solid var(--sb-border);aspect-ratio:var(--sb-camera-aspect);flex:1;display:flex;align-items:center;justify-content:center;width:100%;max-height:none}
   .video-element{width:100%;height:100%;object-fit:contain;display:block;background:#0a0a0a}
   .video-label{position:absolute;left:10px;top:10px;background:var(--sb-panel);border:1px solid var(--sb-border);border-radius:var(--sb-radius);padding:6px 8px;font-size:12px;letter-spacing:0.12em;text-transform:uppercase;color:var(--sb-muted);z-index:5}
   .telemetry{position:absolute;right:10px;top:10px;display:flex;gap:16px;background:rgba(26,26,26,0.8);border:1px solid var(--sb-border);border-radius:var(--sb-radius);padding:8px 12px;font-size:11px;letter-spacing:0.08em;text-transform:uppercase;color:var(--sb-muted);z-index:5}

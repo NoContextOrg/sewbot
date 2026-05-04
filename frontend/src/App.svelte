@@ -3,10 +3,26 @@
   import { onMount } from "svelte";
   import SewbotDashboard from "./lib/SewbotDashboard.svelte";
 
-  const backendOrigin =
-    import.meta.env.VITE_BACKEND_ORIGIN ||
-    import.meta.env.VITE_BACKEND_URL ||
-    '';
+  const normalizeOrigin = (value) => (value ? value.replace(/\/+$/, '') : '');
+  const resolveBackendOrigin = () => {
+    const envOrigin = normalizeOrigin(
+      import.meta.env.VITE_BACKEND_ORIGIN ||
+      import.meta.env.VITE_BACKEND_URL ||
+      ''
+    );
+
+    if (envOrigin) return envOrigin;
+    if (typeof window === 'undefined') return '';
+
+    if (import.meta.env.DEV) {
+      const host = window.location.hostname || 'localhost';
+      return `http://${host}:5000`;
+    }
+
+    return window.location.origin;
+  };
+
+  const backendOrigin = resolveBackendOrigin();
 
   const socket = io(backendOrigin || undefined, {
     transports: ["websocket", "polling"],
