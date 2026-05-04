@@ -23,6 +23,8 @@ socketio = SocketIO(app, cors_allowed_origins="*", async_mode='gevent')
 CAMERA_WIDTH = 640
 CAMERA_HEIGHT = 480
 CAMERA_FPS = 15
+CAMERA_JPEG_QUALITY = int(os.getenv("CAMERA_JPEG_QUALITY", "40"))
+CAMERA_BUFFER_GRABS = int(os.getenv("CAMERA_BUFFER_GRABS", "2"))
 MAX_READ_RETRIES = 5
 
 # Shared camera instance used by the video stream generator.
@@ -146,10 +148,7 @@ class RpicamMjpegAdapter:
         if jpeg is None:
             return False, None
 
-        frame = cv2.imdecode(np.frombuffer(jpeg, dtype=np.uint8), cv2.IMREAD_COLOR)
-        if frame is None:
-            return False, None
-        return True, frame
+        return True, jpeg
 
     def release(self):
         if not self._opened:
@@ -177,6 +176,19 @@ def _configure_v4l2(cam):
     cam.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*'MJPG'))
     cam.set(cv2.CAP_PROP_FRAME_WIDTH, CAMERA_WIDTH)
     cam.set(cv2.CAP_PROP_FRAME_HEIGHT, CAMERA_HEIGHT)
+    cam.set(cv2.CAP_PROP_FPS, CAMERA_FPS)
+    cam.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+
+
+def _drain_camera_buffer(cam, grabs=CAMERA_BUFFER_GRABS):
+    if not hasattr(cam, "grab"):
+        return
+
+    for _ in range(grabs):
+        try:
+            cam.grab()
+        except Exception:
+            break
 
 
 def _release_camera(cam):
@@ -255,7 +267,7 @@ def init_camera():
             (
                 f"V4L2 GStreamer {dev_path}",
                 lambda path=dev_path: cv2.VideoCapture(
-                    f"v4l2src device={path} ! video/x-raw,width={CAMERA_WIDTH},height={CAMERA_HEIGHT} ! videoconvert ! appsink",
+                    f"v4l2src device={path} ! video/x-raw,width={CAMERA_WIDTH},height={CAMERA_HEIGHT},framerate={CAMERA_FPS}/1 ! videoconvert ! appsink drop=true max-buffers=1 sync=false",
                     cv2.CAP_GSTREAMER,
                 ),
             )
@@ -274,6 +286,8 @@ def init_camera():
             print(f"{backend_name} open threw exception: {exc}")
             continue
 
+        if hasattr(cam, "set"):
+            cam.set(cv2.CAP_PROP_BUFFERSIZE, 1)
         if backend_name.startswith("V4L2"):
             _configure_v4l2(cam)
 
@@ -306,6 +320,7 @@ def read_frame_with_retries(max_retries=MAX_READ_RETRIES):
                 time.sleep(0.2)
                 continue
 
+        _drain_camera_buffer(camera)
         success, frame = camera.read()
         if success:
             return True, frame
@@ -332,16 +347,28 @@ def gen_frames():
             print("Error: Could not read frame.")
             time.sleep(0.25)
             continue
-        
-        _, buffer = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 35])
+
+        if isinstance(frame, (bytes, bytearray)):
+            jpeg_bytes = frame
+        else:
+            ok, buffer = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, CAMERA_JPEG_QUALITY])
+            if not ok:
+                continue
+            jpeg_bytes = buffer.tobytes()
+
         yield (b'--frame\r\n'
-               b'Content-Type: image/jpeg\r\n\r\n' + buffer.tobytes() + b'\r\n')
-        
-        time.sleep(0.01)
+               b'Content-Type: image/jpeg\r\n'
+               b'Content-Length: ' + str(len(jpeg_bytes)).encode('ascii') + b'\r\n\r\n' + jpeg_bytes + b'\r\n')
 
 @app.route('/video_feed')
 def video_feed():
-    return Response(gen_frames(), mimetype='multipart/x-mixed-replace; boundary=frame')
+    headers = {
+        "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+        "Pragma": "no-cache",
+        "Expires": "0",
+        "X-Accel-Buffering": "no",
+    }
+    return Response(gen_frames(), mimetype='multipart/x-mixed-replace; boundary=frame', headers=headers)
 
 @socketio.on('move')
 def handle_move(data):
