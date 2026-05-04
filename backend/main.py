@@ -9,7 +9,7 @@ def run_failsafe(error_msg):
     print(error_msg)
 
     app = Flask(__name__, static_folder='../frontend/dist', static_url_path='/')
-    socketio = SocketIO(app, cors_allowed_origins="*", async_mode='gevent')
+    socketio = SocketIO(app, cors_allowed_origins="*")
 
     @app.route('/')
     def serve():
@@ -48,11 +48,13 @@ if __name__ == '__main__':
         
         setup_routes(app, socketio)
 
-        # Load heavy camera hardware logic here
-        # If it fails (e.g. cv2 ImportError due to missing libGL.so), the outer except catches it
+        # Start heavy camera hardware logic in the background so it never blocks port 5000 from opening
         import camera
-        if not camera.init_camera():
-            log.warning("Camera failed to initialize at startup. Will keep retrying during stream requests.")
+        def boot_camera():
+            if not camera.init_camera():
+                log.warning("Camera failed to initialize at startup. Will keep retrying during stream requests.")
+        
+        socketio.start_background_task(boot_camera)
 
         log.info("Finished booting! Starting Robot Server on http://0.0.0.0:5000")
         socketio.run(app, host='0.0.0.0', port=5000)

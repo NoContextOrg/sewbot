@@ -256,19 +256,6 @@ def init_camera():
         ),
     ])
 
-    for dev_path in sorted(glob.glob("/dev/video*")):
-        dev_index = int(dev_path.replace("/dev/video", ""))
-        attempts.append(
-            (
-                f"V4L2 GStreamer {dev_path}",
-                lambda path=dev_path: cv2.VideoCapture(
-                    f"v4l2src device={path} ! video/x-raw,width={CAMERA_WIDTH},height={CAMERA_HEIGHT},framerate={CAMERA_FPS}/1 ! videoconvert ! appsink drop=true max-buffers=1 sync=false",
-                    cv2.CAP_GSTREAMER,
-                ),
-            )
-        )
-        attempts.append((f"V4L2 index{dev_index}", lambda idx=dev_index: cv2.VideoCapture(idx, cv2.CAP_V4L2)))
-
     attempts.extend([
         ("V4L2 index0", lambda: cv2.VideoCapture(0, cv2.CAP_V4L2)),
         ("Default index0", lambda: cv2.VideoCapture(0)),
