@@ -4,6 +4,7 @@ import sys
 import shutil
 import subprocess
 import select
+import os
 from config import CAMERA_WIDTH, CAMERA_HEIGHT, CAMERA_FPS, CAMERA_BUFFER_GRABS, MAX_READ_RETRIES
 import logging
 
