@@ -58,17 +58,17 @@
     speed = Math.max(0, speed - 5);
   }
 
-  onMount(()=>{
-    const demo = [
-      'Initializing pattern recognition…',
-      'Stitch motor temp stable at 42°C',
-      'Queue: Job42 uploaded by user@studio',
-      'Auto-calibration complete',
-      'Note: Needle #3 replaced — verify tension'
-    ];
-    let i=0;
-    const id = setInterval(()=>{ pushBubble(demo[i%demo.length]); i++; if(i>8) clearInterval(id); }, 1800);
-  });
+  function submitCommand(){
+    const v = chatText.trim();
+    if (!v) return;
+    dispatch('command', { text: v });
+    chatText = '';
+  }
+
+  function confirmPowerOff(){
+    const ok = window.confirm('Power off the sewbot now?');
+    if (ok) dispatch('poweroff');
+  }
 </script>
 
 <div class="viewport">
@@ -140,6 +140,7 @@
             </div>
           </div>
 
+          <button class="btn-power" title="Power off" on:click={confirmPowerOff}>POWER</button>
           <button class="btn-chat" title="Toggle system log" on:click={() => chatOpen = !chatOpen}>
             {#if chatOpen}✕{:else}☰{/if}
           </button>
@@ -156,24 +157,16 @@
         <div class="chat-input">
           <input
             bind:value={chatText}
-            placeholder="Enter command…"
+            placeholder="SSH command..."
             on:keydown={(e) => {
               if (e.key === 'Enter') {
-                const v = chatText.trim();
-                if (!v) return;
-                pushBubble(v, 'user');
-                chatText = '';
+                submitCommand();
               }
             }}
           />
           <button
             type="button"
-            on:click={() => {
-              const v = chatText.trim();
-              if (!v) return;
-              pushBubble(v, 'user');
-              chatText = '';
-            }}
+            on:click={submitCommand}
           >Send</button>
         </div>
       </aside>
@@ -265,6 +258,12 @@
   ::slotted(.bubble.user){
     border-color:var(--sb-accent);
   }
+  ::slotted(.bubble.warn){
+    background:#2A2115;
+    border:1px solid #F59E0B;
+    border-left:4px solid #F59E0B;
+    color:#FDE68A;
+  }
   ::slotted(.bubble.error){
     background:#2D1B1B;
     border:1px solid #EF4444;
@@ -286,7 +285,11 @@
   .btn-chat:hover{background:#333}
   .btn-chat:active{background:#2f2f2f}
 
-  .control-pad-overlay{display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:12px;align-items:end;padding:12px;position:absolute;bottom:0;left:0;right:0;background:linear-gradient(180deg, rgba(15,15,15,0), rgba(15,15,15,0.95));border-top:1px solid var(--sb-border);z-index:10}
+  .btn-power{height:42px;min-width:86px;padding:0 12px;border-radius:8px;border:1px solid #991B1B;background:#7F1D1D;color:#fff;font-weight:800;letter-spacing:0.08em;text-transform:uppercase;font-size:11px;cursor:pointer;transition:background 120ms ease, border-color 120ms ease}
+  .btn-power:hover{background:#9B1C1C}
+  .btn-power:active{background:#7F1D1D}
+
+  .control-pad-overlay{display:grid;grid-template-columns:1fr 1fr 1fr auto auto;gap:12px;align-items:end;padding:12px;position:absolute;bottom:0;left:0;right:0;background:linear-gradient(180deg, rgba(15,15,15,0), rgba(15,15,15,0.95));border-top:1px solid var(--sb-border);z-index:10}
   .section-title{font-size:11px;letter-spacing:0.14em;text-transform:uppercase;color:var(--sb-muted);margin-bottom:10px}
 
   .dpad{display:grid;grid-template-columns:48px 48px 48px;grid-template-rows:48px 48px 48px;gap:6px;place-items:center}
