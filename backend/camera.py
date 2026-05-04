@@ -32,16 +32,27 @@ _printed_runtime_diagnostics = False
 class PiCameraAdapter:
     def __init__(self, width, height):
         self._opened = False
-        self._cam = Picamera2()
-        frame_us = int(1_000_000 / CAMERA_FPS)
-        config = self._cam.create_preview_configuration(
-            main={"size": (width, height), "format": "BGR888"},
-            controls={"FrameDurationLimits": (frame_us, frame_us)},
-            buffer_count=2,
-        )
-        self._cam.configure(config)
-        self._cam.start()
-        self._opened = True
+        self._cam = None
+        cam = None
+        try:
+            cam = Picamera2()
+            frame_us = int(1_000_000 / CAMERA_FPS)
+            config = cam.create_preview_configuration(
+                main={"size": (width, height), "format": "BGR888"},
+                controls={"FrameDurationLimits": (frame_us, frame_us)},
+                buffer_count=2,
+            )
+            cam.configure(config)
+            cam.start()
+            self._cam = cam
+            self._opened = True
+        except Exception:
+            if cam is not None:
+                try:
+                    cam.close()
+                except Exception:
+                    pass
+            raise
 
     def isOpened(self):
         return self._opened
@@ -103,17 +114,10 @@ class RpicamMjpegAdapter:
         self._proc = subprocess.Popen(
             cmd,
             stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
             bufsize=0,
-            text=False
         )
-        time.sleep(0.5) # Give it half a second to crash/bind
-        if self._proc.poll() is not None:
-            err = self._proc.stderr.read().decode('utf-8', errors='ignore')
-            log.error(f"rpicam-vid exited immediately with code {self._proc.returncode}. Stderr: {err}")
-            self._opened = False
-        else:
-            self._opened = True
+        self._opened = self._proc.poll() is None and self._proc.stdout is not None
 
     def isOpened(self):
         return self._opened
@@ -269,7 +273,23 @@ def init_camera():
             ),
         ])
 
-        # V4L2 and generic index0 attempts removed because on Bookworm/Trixie /dev/video0 is an ISP codec which instantly hard-locks the C++ thread.
+        for dev_path in sorted(glob.glob("/dev/video*")):
+            dev_index = int(dev_path.replace("/dev/video", ""))
+            attempts.append(
+                (
+                    f"V4L2 GStreamer {dev_path}",
+                    lambda path=dev_path: cv2.VideoCapture(
+                        f"v4l2src device={path} ! video/x-raw,width={CAMERA_WIDTH},height={CAMERA_HEIGHT},framerate={CAMERA_FPS}/1 ! videoconvert ! appsink drop=true max-buffers=1 sync=false",
+                        cv2.CAP_GSTREAMER,
+                    ),
+                )
+            )
+            attempts.append((f"V4L2 index{dev_index}", lambda idx=dev_index: cv2.VideoCapture(idx, cv2.CAP_V4L2)))
+
+        attempts.extend([
+            ("V4L2 index0", lambda: cv2.VideoCapture(0, cv2.CAP_V4L2)),
+            ("Default index0", lambda: cv2.VideoCapture(0)),
+        ])
 
         for backend_name, open_camera in attempts:
             try:
@@ -306,19 +326,24 @@ def read_frame_with_retries(max_retries=MAX_READ_RETRIES):
     global camera
 
     for attempt in range(1, max_retries + 1):
+        init_failed = False
         with camera_lock:
             if camera is None or not camera.isOpened():
                 log.warning("Camera unavailable, attempting reinitialization...")
                 if not init_camera():
-                    success = False
+                    init_failed = True
                 elif camera is None or not camera.isOpened():
-                    success = False
+                    init_failed = True
                 else:
                     _drain_camera_buffer(camera)
                     success, frame = camera.read()
             else:
                 _drain_camera_buffer(camera)
                 success, frame = camera.read()
+
+        if init_failed:
+            time.sleep(0.2)
+            continue
 
         if success:
             return True, frame
