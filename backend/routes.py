@@ -16,7 +16,13 @@ def setup_routes(app, socketio):
     def gen_frames():
         from camera import read_frame_with_retries
         import cv2
+        
+        frames = 0
+        last_time = time.time()
+        bytes_sent = 0
+
         while True:
+            t0 = time.time()
             success, frame = read_frame_with_retries()
             if not success:
                 log.warning("Could not read frame.")
@@ -31,9 +37,30 @@ def setup_routes(app, socketio):
                     continue
                 jpeg_bytes = buffer.tobytes()
 
+            frame_len = len(jpeg_bytes)
             yield (b'--frame\r\n'
                    b'Content-Type: image/jpeg\r\n'
-                   b'Content-Length: ' + str(len(jpeg_bytes)).encode('ascii') + b'\r\n\r\n' + jpeg_bytes + b'\r\n')
+                   b'Content-Length: ' + str(frame_len).encode('ascii') + b'\r\n\r\n' + jpeg_bytes + b'\r\n')
+            
+            t1 = time.time()
+            frames += 1
+            bytes_sent += frame_len
+            
+            if t1 - last_time >= 1.0:
+                elapsed = t1 - last_time
+                current_fps = round(frames / elapsed)
+                current_bitrate = round((bytes_sent * 8) / elapsed / 1000000, 2)
+                current_latency = round((t1 - t0) * 1000)
+                
+                socketio.emit('telemetry', {
+                    'fps': current_fps,
+                    'bitrate': current_bitrate,
+                    'latency': current_latency
+                })
+                
+                frames = 0
+                bytes_sent = 0
+                last_time = t1
 
     @app.route('/video_feed')
     def video_feed():

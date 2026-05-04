@@ -2,6 +2,7 @@
   import { onMount, createEventDispatcher } from 'svelte';
   export let backendOrigin = '';
   export let status = 'Offline';
+  export let telemetry = { fps: 0, latency: 0, bitrate: 0 };
   export let sendMove = (dir = '') => {};
 
   const dispatch = createEventDispatcher();
@@ -17,19 +18,11 @@
   let recordOn = false;
   let speed = 50;
 
-  let fps = 60;
-  let latency = 32;
-  let bitrate = 4.2;
-  let chatOpen = false;
+  $: fps = telemetry.fps || 0;
+  $: latency = telemetry.latency || 0;
+  $: bitrate = telemetry.bitrate || 0;
 
-  onMount(() => {
-    const telemetryInt = setInterval(() => {
-      fps = 55 + Math.round(Math.random() * 10);
-      latency = 20 + Math.round(Math.random() * 40);
-      bitrate = 3.5 + Math.random() * 1.5;
-    }, 2000);
-    return () => clearInterval(telemetryInt);
-  });
+  let chatOpen = false;
 
   function reloadFeed(){ feedError=''; feedNonce = Date.now(); }
 

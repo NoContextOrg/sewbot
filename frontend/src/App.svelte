@@ -32,6 +32,7 @@
 
   let status = "Offline";
   let messages = [];
+  let telemetry = { fps: 0, latency: 0, bitrate: 0 };
   const MAX_MESSAGES = 200;
 
   const nowTs = () =>
@@ -39,6 +40,10 @@
 
   const appendMessage = (message) => {
     messages = [...messages, message].slice(-MAX_MESSAGES);
+  };
+
+  const handleTelemetry = (data) => {
+    telemetry = data;
   };
 
   const handleConnect = () => {
@@ -68,6 +73,7 @@
     socket.on("connect", handleConnect);
     socket.on("disconnect", handleDisconnect);
     socket.on("connect_error", handleError);
+    socket.on("telemetry", handleTelemetry);
     socket.on("log", handleLog);
 
     socket.connect();
@@ -77,6 +83,7 @@
       socket.off("connect", handleConnect);
       socket.off("disconnect", handleDisconnect);
       socket.off("connect_error", handleError);
+      socket.off("telemetry", handleTelemetry);
       socket.off("log", handleLog);
       socket.disconnect();
     };
@@ -113,7 +120,7 @@
 
 </script>
 
-<SewbotDashboard {backendOrigin} {status} {sendMove} on:bubble={handleBubble} on:command={handleCommand} on:poweroff={handlePowerOff}>
+<SewbotDashboard {backendOrigin} {status} {telemetry} {sendMove} on:bubble={handleBubble} on:command={handleCommand} on:poweroff={handlePowerOff}>
   <svelte:fragment slot="bubbles">
     {#each messages as m}
       <div class="bubble {m.cls}">
