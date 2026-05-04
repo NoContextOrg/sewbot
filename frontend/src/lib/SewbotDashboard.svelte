@@ -46,13 +46,56 @@
     dispatch('bubble', { text, cls, ts: nowTs() });
   }
 
+  let pressed = { w: false, a: false, s: false, d: false };
+
   function sendDir(dir){
     sendMove(dir);
+    pressed = { ...pressed, [dir]: true };
   }
 
-  function stopDir(){
-    sendMove('stop');
+  function stopDir(dir, fromKeyboard = false){
+    if (dir && pressed[dir]) {
+      sendMove('stop');
+      if (fromKeyboard) {
+        // Add a short delay for visual feedback
+        setTimeout(() => {
+          pressed = { ...pressed, [dir]: false };
+        }, 100);
+      } else {
+        pressed = { ...pressed, [dir]: false };
+      }
+    } else if (!dir) {
+      sendMove('stop');
+      pressed = { w: false, a: false, s: false, d: false };
+    }
   }
+
+  function handleKeyDown(e) {
+    // Ignore if typing in an input or textarea
+    const tag = document.activeElement?.tagName;
+    if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+    const key = e.key.toLowerCase();
+    if (['w','a','s','d'].includes(key) && !pressed[key]) {
+      sendDir(key);
+    }
+  }
+  function handleKeyUp(e) {
+    const tag = document.activeElement?.tagName;
+    if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+    const key = e.key.toLowerCase();
+    if (['w','a','s','d'].includes(key)) {
+      stopDir(key, true);
+    }
+  }
+
+  onMount(() => {
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyUp);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
+    };
+  });
 
   function increaseSpeed(){
     speed = Math.min(100, speed + 5);
@@ -73,89 +116,103 @@
     const ok = window.confirm('Power off the sewbot now?');
     if (ok) dispatch('poweroff');
   }
+
+// --- Control handlers (replace with real logic as needed) ---
+function handleSideFlap(action) {
+  // TODO: connect to backend
+  pushBubble(`Side Flap: ${action}`);
+}
+function handleRamp(action) {
+  // TODO: connect to backend
+  pushBubble(`Ramp: ${action}`);
+}
+function handleSpray(action) {
+  // TODO: connect to backend
+  pushBubble(`Spray: ${action}`);
+}
+function handlePump(action) {
+  // TODO: connect to backend
+  pushBubble(`Pump: ${action}`);
+}
+function handleConveyor(action) {
+  // TODO: connect to backend
+  pushBubble(`Conveyor: ${action}`);
+}
 </script>
 
 <div class="viewport">
   <main class="main-grid">
-    <section class="video-wrap">
-      <div class="video-stage" aria-label="Sewbot camera feed">
-        <div class="overlay-head">
-          <div class="overlay-brand">
-            <div class="brand-name">Sewbot</div>
-            <div class="brand-sub">ROBOTIC CONTROLLER</div>
-          </div>
-          <div class="overlay-status">
-            <span class="pill live-feed-indicator {liveFeed ? 'live' : 'not-live'}">
-              {#if liveFeed}
-                <span class="blinking-dot"></span> LIVE
-              {:else}
-                <span class="not-live-dot"></span> NOT LIVE
-              {/if}
-            </span>
-          </div>
-        </div>
-        <img src={feedUrl} alt="camera feed" class="video-element" on:error={handleFeedError} on:load={handleFeedLoad} />
-        <div class="telemetry">
-          <div class="telem-item">FPS <strong>{fps}</strong></div>
-          <div class="telem-item">Latency <strong>{latency}ms</strong></div>
-          <div class="telem-item">Bitrate <strong>{bitrate.toFixed(1)}Mb/s</strong></div>
-        </div>
-        {#if feedError}
-          <div class="video-error">{feedError} <button type="button" class="link" on:click={reloadFeed}>Retry</button></div>
-        {/if}
-
-        <footer class="control-pad-overlay">
-          <div class="controls-left">
-            <div class="section-title">D-PAD</div>
+        <footer class="control-pad-overlay control-sections">
+          <div class="control-section">
+            <div class="section-title">MOVEMENT</div>
             <div class="dpad">
               <div></div>
-              <button class="dpad-btn" aria-label="Up" on:pointerdown={() => sendDir('w')} on:pointerup={stopDir} on:pointerleave={stopDir}>
+              <button class="dpad-btn {pressed.w ? 'pressed' : ''}" aria-label="Up" on:pointerdown={() => sendDir('w')} on:pointerup={() => stopDir('w')} on:pointerleave={() => stopDir('w')}>
                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 8v8M8 12l4-4 4 4" stroke="currentColor" fill="none" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                <span class="dpad-key">W</span>
               </button>
               <div></div>
 
-              <button class="dpad-btn" aria-label="Left" on:pointerdown={() => sendDir('a')} on:pointerup={stopDir} on:pointerleave={stopDir}>
+              <button class="dpad-btn {pressed.a ? 'pressed' : ''}" aria-label="Left" on:pointerdown={() => sendDir('a')} on:pointerup={() => stopDir('a')} on:pointerleave={() => stopDir('a')}>
                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 12h8M12 16l-4-4 4-4" stroke="currentColor" fill="none" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                <span class="dpad-key">A</span>
               </button>
               <div class="dpad-center" aria-hidden="true"></div>
-              <button class="dpad-btn" aria-label="Right" on:pointerdown={() => sendDir('d')} on:pointerup={stopDir} on:pointerleave={stopDir}>
+              <button class="dpad-btn {pressed.d ? 'pressed' : ''}" aria-label="Right" on:pointerdown={() => sendDir('d')} on:pointerup={() => stopDir('d')} on:pointerleave={() => stopDir('d')}>
                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 12H8M12 8l4 4-4 4" stroke="currentColor" fill="none" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                <span class="dpad-key">D</span>
               </button>
 
               <div></div>
-              <button class="dpad-btn" aria-label="Down" on:pointerdown={() => sendDir('s')} on:pointerup={stopDir} on:pointerleave={stopDir}>
+              <button class="dpad-btn {pressed.s ? 'pressed' : ''}" aria-label="Down" on:pointerdown={() => sendDir('s')} on:pointerup={() => stopDir('s')} on:pointerleave={() => stopDir('s')}>
                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V8m-4-4l4 4 4-4" stroke="currentColor" fill="none" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                <span class="dpad-key">S</span>
               </button>
               <div></div>
             </div>
           </div>
 
-          <div class="controls-mid">
-            <div class="section-title">CAMERA</div>
-            <div style="display:flex;align-items:center;gap:8px">
-              <button class="camera-toggle" aria-pressed={cameraOn} class:on={cameraOn} on:click={() => (cameraOn = !cameraOn)}>
-                {#if cameraOn}📷{:else}📷✖{/if}
-              </button>
+          <div class="control-section">
+            <div class="section-title">SIDE FLAPS</div>
+            <div class="control-row">
+              <button class="action-btn" on:click={() => handleSideFlap('open')}>Open</button>
+              <button class="action-btn" on:click={() => handleSideFlap('close')}>Close</button>
             </div>
           </div>
 
-          <div class="controls-right">
-            <div class="section-title">SPEED</div>
-            <div class="speed accel">
-              <button class="accel-btn decel" type="button" on:click={decreaseSpeed}>−</button>
-              <input type="range" min="0" max="100" step="1" bind:value={speed} aria-label="Speed" />
-              <button class="accel-btn inc" type="button" on:click={increaseSpeed}>+</button>
-              <div class="speed-val">{speed}%</div>
+          <div class="control-section">
+            <div class="section-title">RAMP</div>
+            <div class="control-row">
+              <button class="action-btn" on:click={() => handleRamp('up')}>Up</button>
+              <button class="action-btn" on:click={() => handleRamp('open')}>Open</button>
+              <button class="action-btn" on:click={() => handleRamp('close')}>Close</button>
             </div>
           </div>
 
-          <button class="btn-power" title="Power off" on:click={confirmPowerOff}>POWER</button>
-          <button class="btn-chat" title="Toggle system log" on:click={() => chatOpen = !chatOpen}>
-            {#if chatOpen}✕{:else}☰{/if}
-          </button>
+          <div class="control-section">
+            <div class="section-title">SPRAY</div>
+            <div class="control-row">
+              <button class="action-btn" on:click={() => handleSpray('left')}>Left</button>
+              <button class="action-btn" on:click={() => handleSpray('right')}>Right</button>
+            </div>
+          </div>
+
+          <div class="control-section">
+            <div class="section-title">PUMP</div>
+            <div class="control-row">
+              <button class="action-btn" on:click={() => handlePump('on')}>On</button>
+              <button class="action-btn" on:click={() => handlePump('off')}>Off</button>
+            </div>
+          </div>
+
+          <div class="control-section">
+            <div class="section-title">CONVEYOR</div>
+            <div class="control-row">
+              <button class="action-btn" on:click={() => handleConveyor('on')}>On</button>
+              <button class="action-btn" on:click={() => handleConveyor('off')}>Off</button>
+            </div>
+          </div>
         </footer>
-      </div>
-    </section>
 
     {#if chatOpen}
       <aside class="chat-panel chat-modal">
@@ -347,7 +404,22 @@
   .btn-power:hover{background:#9B1C1C}
   .btn-power:active{background:#7F1D1D}
 
-  .control-pad-overlay{display:grid;grid-template-columns:1fr 1fr 1fr auto auto;gap:12px;align-items:end;padding:12px;position:absolute;bottom:0;left:0;right:0;background:linear-gradient(180deg, rgba(15,15,15,0), rgba(15,15,15,0.72));-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px) saturate(110%);border-top:1px solid rgba(255,255,255,0.03);z-index:10}
+  .control-pad-overlay{
+    display:grid;
+    grid-template-columns:1fr 1fr 1fr auto auto;
+    gap:12px;
+    align-items:end;
+    padding:12px;
+    position:absolute;
+    bottom:0;
+    left:0;
+    right:0;
+    background:rgba(26,26,26,0.8);
+    border:1px solid var(--sb-border);
+    border-radius:var(--sb-radius);
+    box-shadow:0 2px 12px 0 rgba(0,0,0,0.18);
+    z-index:10;
+  }
   .section-title{font-size:11px;letter-spacing:0.14em;text-transform:uppercase;color:var(--sb-muted);margin-bottom:10px}
 
   .dpad{
@@ -356,11 +428,11 @@
     grid-template-rows:48px 48px 48px;
     gap:6px;
     place-items:center;
-    background:rgba(26,26,26,0.8);
-    border:1px solid var(--sb-border);
-    border-radius:var(--sb-radius);
-    padding:10px;
-    box-shadow:0 2px 12px 0 rgba(0,0,0,0.18);
+    background:transparent;
+    border:none;
+    border-radius:0;
+    padding:0;
+    box-shadow:none;
   }
   .dpad-btn{width:48px;height:48px;border-radius:8px;border:1px solid var(--sb-border);background:var(--sb-bubble);display:flex;align-items:center;justify-content:center;cursor:pointer;color:#fff}
   .dpad-btn svg{width:18px;height:18px}
