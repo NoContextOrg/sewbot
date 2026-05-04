@@ -6,9 +6,9 @@
   const backendOrigin =
     import.meta.env.VITE_BACKEND_ORIGIN ||
     import.meta.env.VITE_BACKEND_URL ||
-    '/api/v1';
+    '';
 
-  const socket = io(backendOrigin, {
+  const socket = io(backendOrigin || undefined, {
     transports: ["websocket", "polling"],
     reconnection: true,
   });
