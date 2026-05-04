@@ -7,7 +7,26 @@ from shell import start_journal_stream, run_cmd, run_power_off
 import logging
 log = logging.getLogger("sewbot")
 
+telemetry_state = {
+    'fps': 0,
+    'bitrate': 0.0,
+    'latency': 0.0,
+    'active': False
+}
+
 def setup_routes(app, socketio):
+
+    def telemetry_loop():
+        while True:
+            if telemetry_state['active']:
+                socketio.emit('telemetry', {
+                    'fps': telemetry_state['fps'],
+                    'bitrate': telemetry_state['bitrate'],
+                    'latency': telemetry_state['latency']
+                })
+            socketio.sleep(1.0)
+            
+    socketio.start_background_task(telemetry_loop)
 
     @app.route('/')
     def serve():
@@ -21,46 +40,46 @@ def setup_routes(app, socketio):
         last_time = time.time()
         bytes_sent = 0
 
-        while True:
-            t0 = time.time()
-            success, frame = read_frame_with_retries()
-            if not success:
-                log.warning("Could not read frame.")
-                time.sleep(0.25)
-                continue
+        telemetry_state['active'] = True
 
-            if isinstance(frame, (bytes, bytearray)):
-                jpeg_bytes = frame
-            else:
-                ok, buffer = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, CAMERA_JPEG_QUALITY])
-                if not ok:
+        try:
+            while True:
+                t0 = time.time()
+                success, frame = read_frame_with_retries()
+                if not success:
+                    log.warning("Could not read frame.")
+                    time.sleep(0.25)
                     continue
-                jpeg_bytes = buffer.tobytes()
 
-            frame_len = len(jpeg_bytes)
-            yield (b'--frame\r\n'
-                   b'Content-Type: image/jpeg\r\n'
-                   b'Content-Length: ' + str(frame_len).encode('ascii') + b'\r\n\r\n' + jpeg_bytes + b'\r\n')
-            
-            t1 = time.time()
-            frames += 1
-            bytes_sent += frame_len
-            
-            if t1 - last_time >= 1.0:
-                elapsed = t1 - last_time
-                current_fps = round(frames / elapsed)
-                current_bitrate = round((bytes_sent * 8) / elapsed / 1000000, 2)
-                current_latency = round((t1 - t0) * 1000)
+                if isinstance(frame, (bytes, bytearray)):
+                    jpeg_bytes = frame
+                else:
+                    ok, buffer = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, CAMERA_JPEG_QUALITY])
+                    if not ok:
+                        continue
+                    jpeg_bytes = buffer.tobytes()
+
+                frame_len = len(jpeg_bytes)
+                yield (b'--frame\r\n'
+                       b'Content-Type: image/jpeg\r\n'
+                       b'Content-Length: ' + str(frame_len).encode('ascii') + b'\r\n\r\n' + jpeg_bytes + b'\r\n')
                 
-                socketio.emit('telemetry', {
-                    'fps': current_fps,
-                    'bitrate': current_bitrate,
-                    'latency': current_latency
-                })
+                t1 = time.time()
+                frames += 1
+                bytes_sent += frame_len
                 
-                frames = 0
-                bytes_sent = 0
-                last_time = t1
+                if t1 - last_time >= 1.0:
+                    elapsed = t1 - last_time
+                    telemetry_state['fps'] = round(frames / elapsed)
+                    telemetry_state['bitrate'] = round((bytes_sent * 8) / elapsed / 1000000, 2)
+                    telemetry_state['latency'] = round((t1 - t0) * 1000)
+                    
+                    frames = 0
+                    bytes_sent = 0
+                    last_time = t1
+        finally:
+            telemetry_state['active'] = False
+
 
     @app.route('/video_feed')
     def video_feed():
