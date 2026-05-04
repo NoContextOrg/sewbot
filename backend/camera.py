@@ -96,10 +96,17 @@ class RpicamMjpegAdapter:
         self._proc = subprocess.Popen(
             cmd,
             stdout=subprocess.PIPE,
-            stderr=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
             bufsize=0,
+            text=False
         )
-        self._opened = self._proc.poll() is None and self._proc.stdout is not None
+        time.sleep(0.5) # Give it half a second to crash/bind
+        if self._proc.poll() is not None:
+            err = self._proc.stderr.read().decode('utf-8', errors='ignore')
+            log.error(f"rpicam-vid exited immediately with code {self._proc.returncode}. Stderr: {err}")
+            self._opened = False
+        else:
+            self._opened = True
 
     def isOpened(self):
         return self._opened
@@ -257,10 +264,7 @@ def init_camera():
         ),
     ])
 
-    attempts.extend([
-        ("V4L2 index0", lambda: cv2.VideoCapture(0, cv2.CAP_V4L2)),
-        ("Default index0", lambda: cv2.VideoCapture(0)),
-    ])
+    # V4L2 and generic index0 attempts removed because on Bookworm/Trixie /dev/video0 is an ISP codec which instantly hard-locks the C++ thread.
 
     for backend_name, open_camera in attempts:
         try:
