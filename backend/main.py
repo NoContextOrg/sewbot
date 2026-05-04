@@ -426,6 +426,8 @@ class SSHShellSession:
     def _read_loop(self):
         import re
         ansi_escape = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
+        last_recv_time = time.time()
+        
         while self.alive:
             try:
                 if self.channel.recv_ready():
@@ -435,6 +437,7 @@ class SSHShellSession:
                     text = chunk.decode(errors="ignore")
                     text = ansi_escape.sub('', text)
                     self._buffer += text
+                    last_recv_time = time.time()
                     
                     while True:
                         if "\n" in self._buffer:
@@ -449,12 +452,13 @@ class SSHShellSession:
                                 emit_log(line, source="ssh", level="info", sid=self.sid)
                         else:
                             break
-                            
-                    chk = self._buffer.strip()
-                    if chk and (chk.endswith("$") or chk.endswith("#") or chk.endswith(">") or chk.endswith(":~")):
-                        emit_log(chk, source="ssh", level="info", sid=self.sid)
-                        self._buffer = ""
                 else:
+                    if self._buffer and (time.time() - last_recv_time) > 0.2:
+                        chk = self._buffer.replace("\r", "").strip()
+                        if chk:
+                            emit_log(chk, source="ssh", level="info", sid=self.sid)
+                        self._buffer = ""
+                        
                     socketio.sleep(0.05)
             except Exception as exc:
                 emit_log(f"SSH stream error: {exc}", source="ssh", level="error", sid=self.sid)
@@ -483,7 +487,9 @@ def _get_ssh_session(sid):
             return session
 
         try:
+            emit_log("Establishing SSH connection...", source="ssh", level="info", sid=sid)
             session = SSHShellSession(sid)
+            emit_log("SSH connection established.", source="ssh", level="info", sid=sid)
         except Exception as exc:
             emit_log(f"SSH connect failed: {exc}", source="ssh", level="error", sid=sid)
             return None
