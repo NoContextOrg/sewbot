@@ -61,10 +61,10 @@
   .video-element{width:100%;height:100%;object-fit:cover;display:block;background:#0a0a0a}
   .overlay-head{position:absolute;left:10px;right:10px;top:10px;display:flex;justify-content:space-between;align-items:flex-start;gap:12px;z-index:6}
   .overlay-brand{background:rgba(15,15,15,0.72);-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px) saturate(120%);border:1px solid rgba(255,255,255,0.04);border-radius:var(--sb-radius);padding:6px 8px;display:flex;flex-direction:column;gap:2px}
-  .overlay-status{display:flex;gap:8px;align-items:center;background:rgba(15,15,15,0.72);-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px) saturate(120%);border:1px solid rgba(255,255,255,0.04);border-radius:var(--sb-radius);padding:6px 8px}
+  .overlay-status{display:flex;gap:8px;align-items:center;background:rgba(15,15,15,0.72);-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px) saturate(120%);spadding:6px 8px}
   .telemetry{position:absolute;left:10px;top:62px;display:flex;gap:16px;background:rgba(15,15,15,0.68);-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px) saturate(120%);border:1px solid rgba(255,255,255,0.04);border-radius:var(--sb-radius);padding:8px 12px;font-size:11px;letter-spacing:0.08em;text-transform:uppercase;color:var(--sb-muted);z-index:5}
   .telem-item{display:flex;gap:4px;align-items:center}
-  .telem-item strong{color:var(--sb-accent);font-weight:700}
+  .telem-item strong{font-weight:700}
   .video-error{position:absolute;left:50%;top:10px;transform:translateX(-50%);background:rgba(26,26,26,0.9);-webkit-backdrop-filter:blur(4px);backdrop-filter:blur(4px);border:1px solid rgba(255,255,255,0.04);border-radius:var(--sb-radius);padding:8px 10px;font-size:12px;color:var(--sb-text);z-index:12}
   .link{border:none;background:transparent;color:var(--sb-accent);font-weight:700;cursor:pointer;padding:0 4px}
   .brand-name{font-weight:800;letter-spacing:0.06em;text-transform:uppercase;font-size:14px}

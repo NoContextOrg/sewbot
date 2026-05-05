@@ -138,7 +138,7 @@
     <div class="control-section wide">
       <div class="section-title">SYSTEM</div>
       <div class="control-row">
-        <button class="btn-power" title="Power off" on:click={powerOff}>POWER</button>
+        <button class="btn-power" title="Power off" on:click={powerOff}>POWER OFF</button>
         <button class="action-btn" title="Toggle camera" on:click={toggleCamera} style={cameraOn ? '' : 'color: #ef4444'}>
           CAMERA {cameraOn ? 'ON' : 'OFF'}
         </button>
