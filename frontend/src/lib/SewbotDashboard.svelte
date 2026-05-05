@@ -159,7 +159,11 @@ function handleConveyor(action) {
             </span>
           </div>
         </div>
-        <img src={feedUrl} alt="camera feed" class="video-element" on:error={handleFeedError} on:load={handleFeedLoad} />
+        {#if cameraOn}
+          <img src={feedUrl} alt="camera feed" class="video-element" on:error={handleFeedError} on:load={handleFeedLoad} />
+        {:else}
+          <div class="video-element" style="display:flex;align-items:center;justify-content:center;color:var(--sb-muted);font-weight:bold;font-size:18px;letter-spacing:0.1em;background:#0a0a0a;">CAMERA OFF</div>
+        {/if}
         <div class="telemetry">
           <div class="telem-item">FPS <strong>{fps}</strong></div>
           <div class="telem-item">Latency <strong>{latency}ms</strong></div>
@@ -212,7 +216,6 @@ function handleConveyor(action) {
           <div class="control-section">
             <div class="section-title">RAMP</div>
             <div class="control-row">
-              <button class="action-btn" on:click={() => handleRamp('up')}>Up</button>
               <button class="action-btn" on:click={() => handleRamp('open')}>Open</button>
               <button class="action-btn" on:click={() => handleRamp('close')}>Close</button>
             </div>
@@ -236,7 +239,7 @@ function handleConveyor(action) {
 
           <div class="control-section">
             <div class="section-title">CONVEYOR</div>
-            <div class="control-row" style="display:flex; gap:8px">
+            <div class="control-row">
               <button class="action-btn" on:click={() => handleConveyor('on')}>On</button>
               <button class="action-btn" on:click={() => handleConveyor('off')}>Off</button>
             </div>
@@ -244,10 +247,13 @@ function handleConveyor(action) {
 
           <div class="control-section">
             <div class="section-title">SYSTEM</div>
-            <div class="control-row" style="display:flex; gap:8px; align-items:center;">
+            <div class="control-row">
               <button class="btn-power" title="Power off" on:click={confirmPowerOff}>POWER</button>
-              <button class="btn-chat" title="Toggle system log" on:click={() => chatOpen = !chatOpen}>
-                {#if chatOpen}✕{:else}☰{/if}
+              <button class="action-btn" title="Toggle camera" on:click={() => cameraOn = !cameraOn} style={cameraOn ? '' : 'color: #ef4444'}>
+                CAMERA {cameraOn ? 'ON' : 'OFF'}
+              </button>
+              <button class="action-btn" title="Toggle system log" on:click={() => chatOpen = !chatOpen}>
+                SYSTEM LOGS
               </button>
             </div>
           </div>
@@ -435,38 +441,68 @@ function handleConveyor(action) {
   .chat-input input{flex:1;padding:10px;border-radius:var(--sb-radius);border:1px solid var(--sb-border);background:var(--sb-bubble);color:var(--sb-text);font-family:var(--sb-mono);font-size:12px}
   .chat-input button{padding:10px 14px;border-radius:8px;border:1px solid var(--sb-accent);background:var(--sb-accent);color:#fff;font-weight:800;letter-spacing:0.08em;text-transform:uppercase;font-size:12px;cursor:pointer}
 
-  .btn-chat{width:42px;height:42px;border-radius:8px;border:1px solid var(--sb-border);background:var(--sb-bubble);display:flex;align-items:center;justify-content:center;cursor:pointer;color:#fff;font-size:18px;font-weight:bold;transition:background 120ms ease}
-  .btn-chat:hover{background:#333}
-  .btn-chat:active{background:#2f2f2f}
+  .action-btn {
+    height: 52px;
+    padding: 0 14px;
+    border-radius: 6px;
+    border: 1px solid var(--sb-border);
+    background: var(--sb-bubble);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    color: #fff;
+    font-weight: bold;
+    text-transform: uppercase;
+    font-size: 13px;
+    transition: background 120ms ease;
+  }
+  .action-btn:hover {
+    background: #333;
+  }
+  .action-btn:active {
+    background: #2f2f2f;
+  }
 
-  .btn-power{height:42px;min-width:86px;padding:0 12px;border-radius:8px;border:1px solid #991B1B;background:#7F1D1D;color:#fff;font-weight:800;letter-spacing:0.08em;text-transform:uppercase;font-size:11px;cursor:pointer;transition:background 120ms ease, border-color 120ms ease}
+  .btn-power{height:52px;min-width:86px;padding:0 14px;border-radius:6px;border:1px solid #991B1B;background:#7F1D1D;color:#fff;font-weight:800;letter-spacing:0.08em;text-transform:uppercase;font-size:13px;cursor:pointer;transition:background 120ms ease, border-color 120ms ease}
   .btn-power:hover{background:#9B1C1C}
   .btn-power:active{background:#7F1D1D}
 
   .control-pad-overlay{
     display:flex;
     flex-wrap:wrap;
-    justify-content:space-between;
-    gap:16px;
+    justify-content:center;
+    gap:12px;
     align-items:end;
-    padding:12px;
+    padding:10px;
     position:absolute;
     bottom:0;
     left:0;
     right:0;
-    background:rgba(26,26,26,0.8);
-    border:1px solid var(--sb-border);
-    border-radius:var(--sb-radius);
-    box-shadow:0 2px 12px 0 rgba(0,0,0,0.18);
+    background:rgba(26,26,26,0.85);
+    border-top:1px solid var(--sb-border);
+    border-radius:0 0 var(--sb-radius) var(--sb-radius);
     z-index:10;
   }
-  .section-title{font-size:11px;letter-spacing:0.14em;text-transform:uppercase;color:var(--sb-muted);margin-bottom:10px}
+  .control-section {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+  .section-title{font-size:10px;letter-spacing:0.14em;text-transform:uppercase;color:var(--sb-muted);margin-bottom:6px;text-align:center}
+  .control-row {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+    justify-content: center;
+    flex-wrap: wrap;
+  }
 
   .dpad{
     display:grid;
-    grid-template-columns:48px 48px 48px;
-    grid-template-rows:48px 48px 48px;
-    gap:6px;
+    grid-template-columns:56px 56px 56px;
+    grid-template-rows:56px 56px 56px;
+    gap:4px;
     place-items:center;
     background:transparent;
     border:none;
@@ -474,10 +510,11 @@ function handleConveyor(action) {
     padding:0;
     box-shadow:none;
   }
-  .dpad-btn{width:48px;height:48px;border-radius:8px;border:1px solid var(--sb-border);background:var(--sb-bubble);display:flex;align-items:center;justify-content:center;cursor:pointer;color:#fff}
-  .dpad-btn svg{width:18px;height:18px}
+  .dpad-btn{width:56px;height:56px;border-radius:6px;border:1px solid var(--sb-border);background:var(--sb-bubble);display:flex;align-items:center;justify-content:center;cursor:pointer;color:#fff;transition:background 120ms ease}
+  .dpad-btn:hover{background:#333}
+  .dpad-btn svg{width:22px;height:22px}
   .dpad-btn:active{background:#2f2f2f}
-  .dpad-center{width:48px;height:48px;border-radius:8px;border:1px solid var(--sb-border);background:#1f1f1f}
+  .dpad-center{width:56px;height:56px;border-radius:6px;border:1px solid var(--sb-border);background:#1f1f1f}
 
   /* camera toggle */
   .camera-toggle{width:56px;height:36px;border-radius:10px;border:1px solid var(--sb-border);background:var(--sb-bubble);display:flex;align-items:center;justify-content:center;cursor:pointer;color:#fff;font-size:16px}
