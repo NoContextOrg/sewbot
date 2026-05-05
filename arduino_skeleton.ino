@@ -10,6 +10,41 @@ const int MOTOR_RIGHT_B = 28;
 const int PUMP_PIN = 34;
 const int CONVEYOR_PIN = 30;
 
+// ---------------- PROTOCOL HELPERS ----------------
+// Accept either full commands like "move:w" or shorthand movement strings like "wa".
+// Non-command UART text (e.g., Raspberry Pi boot console output) is ignored.
+bool warnedNoise = false;
+
+bool isWasdChar(char c) {
+  return c == 'w' || c == 'a' || c == 's' || c == 'd';
+}
+
+bool isMovementShorthand(const String &s) {
+  if (s.length() == 0 || s.length() > 4) return false;
+  for (unsigned int i = 0; i < s.length(); i++) {
+    if (!isWasdChar(s.charAt(i))) return false;
+  }
+  return true;
+}
+
+bool isKnownCategory(const String &catLower) {
+  return catLower == "move" ||
+         catLower == "pump" ||
+         catLower == "conveyor" ||
+         catLower == "sideflap" ||
+         catLower == "ramp" ||
+         catLower == "spray";
+}
+
+void warnNoiseOnce() {
+  if (warnedNoise) return;
+  warnedNoise = true;
+  sendLog(
+    "warning",
+    "Ignoring non-command serial input. Commands must be like move:w (or shorthand w/a/s/d). If you see Raspberry Pi boot text here, disable the Pi serial console."
+  );
+}
+
 // ---------------- LOG FUNCTION ----------------
 void sendLog(String level, String msg) {
   String full = "log:" + level + ":" + msg;
@@ -22,6 +57,10 @@ void sendLog(String level, String msg) {
 void setup() {
   Serial.begin(9600);    // USB debug
   Serial2.begin(115200);   // Raspberry Pi UART
+
+  // Keep reads responsive; commands are short and newline-terminated.
+  Serial.setTimeout(25);
+  Serial2.setTimeout(25);
 
   // Set motor pins
   pinMode(MOTOR_LEFT_F, OUTPUT);
@@ -41,27 +80,48 @@ void setup() {
 
 // ---------------- MAIN LOOP ----------------
 void loop() {
+  // Accept commands from both the Raspberry Pi UART (Serial2) and USB Serial (Serial)
+  // so you can debug with the Serial Monitor without re-wiring.
   if (Serial2.available() > 0) {
     String command = Serial2.readStringUntil('\n');
     command.trim();
+    if (command.length() > 0) processCommand(command);
+  }
 
-    if (command.length() > 0) {
-      processCommand(command);
-    }
+  if (Serial.available() > 0) {
+    String command = Serial.readStringUntil('\n');
+    command.trim();
+    if (command.length() > 0) processCommand(command);
   }
 }
 
 // ---------------- COMMAND PROCESSOR ----------------
 void processCommand(String cmd) {
-  int colonIndex = cmd.indexOf(':');
+  cmd.trim();
+  if (cmd.length() == 0) return;
 
+  cmd.toLowerCase();
+
+  // Allow shorthand movement commands: "w", "a", "s", "d", "wa", etc.
+  if (cmd == "stop") {
+    cmd = "move:stop";
+  } else if (isMovementShorthand(cmd)) {
+    cmd = "move:" + cmd;
+  }
+
+  int colonIndex = cmd.indexOf(':');
   if (colonIndex == -1) {
-    sendLog("error", "Invalid format: " + cmd);
+    warnNoiseOnce();
     return;
   }
 
   String category = cmd.substring(0, colonIndex);
   String action = cmd.substring(colonIndex + 1);
+
+  if (!isKnownCategory(category)) {
+    warnNoiseOnce();
+    return;
+  }
 
   sendLog("info", "Processing " + category + ":" + action);
 
@@ -105,7 +165,7 @@ void processCommand(String cmd) {
   }
 
   // -------- PLACEHOLDERS --------
-  else if (category == "sideFlap") {
+  else if (category == "sideflap") {
     sendLog("info", "Side flap: " + action);
   }
 

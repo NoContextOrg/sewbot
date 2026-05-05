@@ -3,6 +3,7 @@ import serial.tools.list_ports
 import time
 import logging
 import threading
+import os
 from logger import emit_log
 
 log = logging.getLogger("sewbot")
@@ -17,25 +18,80 @@ class ArduinoController:
         self.connect()
 
     def find_port(self):
-        import os
-        # Priority list of ports to try
-        priority_ports = ['/dev/serial0', '/dev/ttyAMA0', '/dev/ttyS0', '/dev/ttyUSB0', '/dev/ttyACM0']
-        
-        # Get all available ports
-        available_ports = [p.device for p in serial.tools.list_ports.comports()]
+        preferred = os.getenv("SEWBOT_ARDUINO_PORT", "").strip()
+
+        port_infos = list(serial.tools.list_ports.comports())
+        available_ports = [p.device for p in port_infos]
         log.info(f"Available ports: {available_ports}")
 
-        # Try priority ports first
+        if preferred:
+            if preferred in available_ports or os.path.exists(preferred):
+                log.info(f"Using SEWBOT_ARDUINO_PORT={preferred}")
+                return preferred
+            log.warning(
+                "SEWBOT_ARDUINO_PORT was set but not found: %s (available: %s)",
+                preferred,
+                available_ports,
+            )
+
+        # Prefer USB serial devices when present. This avoids Raspberry Pi UART console chatter
+        # when /dev/serial0 is enabled, and typically just works for Arduino boards.
+        usb_candidates = []
+        arduino_named = []
+        for p in port_infos:
+            dev = p.device
+            desc = (getattr(p, "description", "") or "").lower()
+            manu = (getattr(p, "manufacturer", "") or "").lower()
+
+            if "arduino" in desc or "arduino" in manu:
+                arduino_named.append(dev)
+
+            if (
+                dev.startswith("/dev/ttyACM")
+                or dev.startswith("/dev/ttyUSB")
+                or "usbmodem" in dev
+                or "usbserial" in dev
+            ):
+                usb_candidates.append(dev)
+
+        if arduino_named:
+            return arduino_named[0]
+        if usb_candidates:
+            return usb_candidates[0]
+
+        # Fallback priority list of ports to try
+        priority_ports = ['/dev/serial0', '/dev/ttyAMA0', '/dev/ttyS0']
+
         for p in priority_ports:
             # On Raspberry Pi, /dev/serial0 and /dev/ttyAMA0 are often not listed by list_ports
             if p in available_ports or os.path.exists(p):
                 return p
-        
+
         # If no priority port found, just pick the first available one if any
         if available_ports:
             return available_ports[0]
-        
+
         return None
+
+    def _normalize_outgoing_command(self, cmd: str) -> str:
+        cleaned = (cmd or "").strip()
+        if not cleaned:
+            return ""
+
+        # If caller already provided category:action, pass through.
+        if ":" in cleaned:
+            return cleaned
+
+        lowered = cleaned.lower()
+
+        # Allow simple debugging shorthands
+        if lowered == "stop":
+            return "move:stop"
+
+        if 0 < len(lowered) <= 4 and all(c in "wasd" for c in lowered):
+            return f"move:{lowered}"
+
+        return cleaned
 
     def connect(self):
         self.stop_thread.set()
@@ -100,6 +156,10 @@ class ArduinoController:
         log.info(f"[ARDUINO RAW] {line}")
 
     def send_command(self, cmd: str):
+        cmd = self._normalize_outgoing_command(cmd)
+        if not cmd:
+            return
+
         if not self.ser or not self.ser.is_open:
             log.warning("Serial not connected, trying to reconnect...")
             self.connect()
