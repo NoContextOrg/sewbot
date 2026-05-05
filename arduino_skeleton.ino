@@ -131,6 +131,11 @@ void processCommand(String cmd) {
     return;
   }
 
+  // Small delay to let the Pi finish draining its TX before we reply.
+  // Without this, our response collides with the tail of the incoming
+  // command on the shared UART line and the first bytes get lost.
+  delay(5);
+  Serial2.flush();   // wait for any prior outgoing data to finish
   sendLog("info", "Processing " + category + ":" + action);
 
   // -------- MOVEMENT --------
