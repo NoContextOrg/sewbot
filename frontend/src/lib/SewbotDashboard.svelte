@@ -8,6 +8,7 @@
   export let status = 'Offline';
   export let telemetry = { fps: 0, latency: 0, bitrate: 0 };
   export let sendMove = (dir = '') => {};
+  export let sendAction = (type, action) => {};
 
   const dispatch = createEventDispatcher();
 
@@ -25,6 +26,10 @@
 
   function handleMove(e) {
     sendMove(e.detail);
+  }
+  
+  function handleAction(e) {
+    sendAction(e.detail.type, e.detail.action);
   }
 </script>
 
@@ -45,6 +50,7 @@
       {cameraOn} 
       {chatOpen} 
       on:move={handleMove}
+      on:action={handleAction}
       on:bubble={(e) => dispatch('bubble', { text: e.detail, cls: 'system', ts: new Date().toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}) })}
       on:poweroff={() => dispatch('poweroff')}
       on:toggleCamera={() => cameraOn = !cameraOn}

@@ -126,4 +126,30 @@ def setup_routes(app, socketio):
     @socketio.on('move')
     def handle_move(data):
         if isinstance(data, dict) and 'direction' in data:
-            log.info("Command: %s", data["direction"])
+            direction = data["direction"]
+            log.info("Command: %s", direction)
+            # Send movement command to Arduino (e.g. "move:w")
+            from arduino import arduino
+            arduino.send_command(f"move:{direction}")
+
+    @socketio.on('action')
+    def handle_action(data):
+        if isinstance(data, dict):
+            action_type = data.get("type")
+            action_val = data.get("action")
+            log.info(f"Action: {action_type} -> {action_val}")
+            # Send auxiliary command to Arduino (e.g. "sideFlap:open")
+            from arduino import arduino
+            arduino.send_command(f"{action_type}:{action_val}")
+
+    @app.route('/api/action', methods=['POST'])
+    def api_action():
+        data = request.json or {}
+        action_type = data.get("type")
+        action_val = data.get("action")
+        if action_type and action_val:
+            log.info(f"API Action: {action_type} -> {action_val}")
+            from arduino import arduino
+            arduino.send_command(f"{action_type}:{action_val}")
+            return {"status": "ok", "message": "Command sent"}, 200
+        return {"status": "error", "message": "Missing type or action"}, 400

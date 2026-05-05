@@ -67,6 +67,8 @@ export const disconnectSocket = () => {
 };
 
 export const sendMove = (dir) => socket.emit("move", { direction: dir });
+export const sendAction = (type, action) => socket.emit("action", { type, action });
+
 export const sendShellCommand = (command) => {
   if (!command) return;
   socket.emit("shell_command", { command });

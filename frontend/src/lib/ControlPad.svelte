@@ -57,11 +57,15 @@
   function toggleSystemLog(){ dispatch('toggleLog'); }
 
   // Action handlers
-  function handleSideFlap(action) { dispatch('bubble', `Side Flap: ${action}`); }
-  function handleRamp(action) { dispatch('bubble', `Ramp: ${action}`); }
-  function handleSpray(action) { dispatch('bubble', `Spray: ${action}`); }
-  function handlePump(action) { dispatch('bubble', `Pump: ${action}`); }
-  function handleConveyor(action) { dispatch('bubble', `Conveyor: ${action}`); }
+  function handleAction(type, action) {
+    dispatch('action', { type, action });
+    dispatch('bubble', `${type}: ${action}`);
+  }
+  function handleSideFlap(action) { handleAction('sideFlap', action); }
+  function handleRamp(action) { handleAction('ramp', action); }
+  function handleSpray(action) { handleAction('spray', action); }
+  function handlePump(action) { handleAction('pump', action); }
+  function handleConveyor(action) { handleAction('conveyor', action); }
 </script>
 
 <footer class="control-pad-overlay">

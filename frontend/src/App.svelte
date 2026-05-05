@@ -9,6 +9,7 @@
     messages, 
     backendOrigin, 
     sendMove, 
+    sendAction,
     sendShellCommand, 
     sendPowerOff,
     appendMessage
@@ -39,6 +40,7 @@
   status={$status} 
   telemetry={$telemetry} 
   sendMove={sendMove} 
+  sendAction={sendAction}
   on:bubble={handleBubble} 
   on:command={handleCommand} 
   on:poweroff={handlePowerOff}
