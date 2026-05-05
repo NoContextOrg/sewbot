@@ -21,7 +21,7 @@ void sendLog(String level, String msg) {
 // ---------------- SETUP ----------------
 void setup() {
   Serial.begin(9600);    // USB debug
-  Serial2.begin(9600);   // Raspberry Pi UART
+  Serial2.begin(115200);   // Raspberry Pi UART
 
   // Set motor pins
   pinMode(MOTOR_LEFT_F, OUTPUT);

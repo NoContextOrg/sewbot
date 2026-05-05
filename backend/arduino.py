@@ -8,7 +8,7 @@ from logger import emit_log
 log = logging.getLogger("sewbot")
 
 class ArduinoController:
-    def __init__(self, baudrate=9600):
+    def __init__(self, baudrate=115200):
         self.baudrate = baudrate
         self.ser = None
         self.port = None
