@@ -61,8 +61,8 @@ void setup() {
   Serial2.begin(115200);   // Raspberry Pi UART
 
   // Keep reads responsive; commands are short and newline-terminated.
-  Serial.setTimeout(25);
-  Serial2.setTimeout(25);
+  Serial.setTimeout(100);
+  Serial2.setTimeout(100);
 
   // Set motor pins
   pinMode(MOTOR_LEFT_F, OUTPUT);
@@ -81,9 +81,15 @@ void setup() {
 }
 
 // ---------------- MAIN LOOP ----------------
+unsigned long lastHeartbeat = 0;
 void loop() {
+  // Heartbeat every 2 seconds
+  if (millis() - lastHeartbeat > 2000) {
+    Serial.println("loop alive");
+    lastHeartbeat = millis();
+  }
+
   // Accept commands from both the Raspberry Pi UART (Serial2) and USB Serial (Serial)
-  // so you can debug with the Serial Monitor without re-wiring.
   if (Serial2.available() > 0) {
     String command = Serial2.readStringUntil('\n');
     command.trim();

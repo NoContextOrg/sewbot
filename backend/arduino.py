@@ -116,17 +116,34 @@ class ArduinoController:
                 self.read_thread.start()
             except Exception as e:
                 log.error(f"Failed to connect to Arduino on {self.port}: {e}")
+                err_text = str(e).lower()
+                if "permission denied" in err_text or "errno 13" in err_text:
+                    hint = (
+                        f"Permission denied opening {self.port}. On Raspberry Pi, add the service user to the "
+                        "'dialout' group (e.g. 'sudo usermod -aG dialout <user>') or set "
+                        "SupplementaryGroups=dialout in the systemd unit, then restart the service."
+                    )
+                    emit_log(hint, source="arduino", level="error")
+                    log.error(hint)
                 self.ser = None
         except Exception as e:
             log.error(f"Unexpected Arduino connect error: {e}")
             self.ser = None
 
     def _read_serial_loop(self):
+        import threading
+        last_alive_log = 0
         while not self.stop_thread.is_set():
+            # Log thread health every 2 seconds
+            now = time.time()
+            if now - last_alive_log > 2:
+                log.debug(f"[SERIAL THREAD] alive, thread={threading.current_thread().ident}")
+                last_alive_log = now
             if self.ser and self.ser.is_open:
                 try:
                     if self.ser.in_waiting > 0:
                         line = self.ser.readline().decode('utf-8', errors='ignore').strip()
+                        log.debug(f"[SERIAL READ] {line}")
                         if line:
                             self._handle_incoming_line(line)
                     else:
@@ -174,6 +191,7 @@ class ArduinoController:
                     cmd += '\n'
                 self.ser.write(cmd.encode('utf-8'))
                 log.info(f"Sent to Arduino ({self.port}): {cmd.strip()}")
+                log.debug(f"[SERIAL WRITE] {cmd.strip()}")
             except Exception as e:
                 log.error(f"Error sending command to Arduino: {e}")
                 self.ser = None
