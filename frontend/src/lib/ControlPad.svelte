@@ -7,22 +7,40 @@
 
   let pressed = { w: false, a: false, s: false, d: false };
 
+  function emitMovement() {
+    const activeKeys = Object.keys(pressed).filter(k => pressed[k]).join('');
+    if (activeKeys.length > 0) {
+      dispatch('move', activeKeys);
+    } else {
+      dispatch('move', 'stop');
+    }
+  }
+
   function sendDir(dir){
-    dispatch('move', dir);
     pressed = { ...pressed, [dir]: true };
+    emitMovement();
   }
 
   function stopDir(dir, fromKeyboard = false){
+    if (dir === null) {
+      pressed = { w: false, a: false, s: false, d: false };
+      emitMovement();
+      return;
+    }
+
     if (dir && pressed[dir]) {
-      dispatch('move', 'stop');
       if (fromKeyboard) {
-        setTimeout(() => { pressed = { ...pressed, [dir]: false }; }, 100);
+        setTimeout(() => { 
+          pressed = { ...pressed, [dir]: false }; 
+          emitMovement();
+        }, 100);
       } else {
         pressed = { ...pressed, [dir]: false };
+        emitMovement();
       }
     } else if (!dir) {
-      dispatch('move', 'stop');
       pressed = { w: false, a: false, s: false, d: false };
+      emitMovement();
     }
   }
 
@@ -105,11 +123,13 @@
         <div></div>
 
         <button class="dpad-btn {pressed.a ? 'pressed' : ''}" aria-label="Left" on:pointerdown={() => sendDir('a')} on:pointerup={() => stopDir('a')} on:pointerleave={() => stopDir('a')}>
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 12h8M12 16l-4-4 4-4" stroke="currentColor" fill="none" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
-          <span class="dpad-key">A</span>
-        </button>
-        <div class="dpad-center" aria-hidden="true"></div>
-        <button class="dpad-btn {pressed.d ? 'pressed' : ''}" aria-label="Right" on:pointerdown={() => sendDir('d')} on:pointerup={() => stopDir('d')} on:pointerleave={() => stopDir('d')}>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 12h8M12 16l-4-4 4-4" stroke="currentColor" fill="none" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <span class="dpad-key">A</span>
+      </button>
+      <button class="dpad-center" aria-label="Stop" on:pointerdown={() => stopDir(null)}>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="7" width="10" height="10" fill="currentColor" rx="2" /></svg>
+      </button>
+      <button class="dpad-btn {pressed.d ? 'pressed' : ''}" aria-label="Right" on:pointerdown={() => sendDir('d')} on:pointerup={() => stopDir('d')} on:pointerleave={() => stopDir('d')}>
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 12H8M12 8l4 4-4 4" stroke="currentColor" fill="none" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
           <span class="dpad-key">D</span>
         </button>
@@ -211,7 +231,10 @@
   .dpad-btn svg{width:22px;height:22px}
   .dpad-btn:active{background:#2f2f2f}
   .dpad-btn.pressed{background:var(--sb-accent);border-color:var(--sb-accent);color:#fff}
-  .dpad-center{width:56px;height:56px;border-radius:6px;border:1px solid var(--sb-border);background:#1f1f1f}
+  .dpad-center{width:56px;height:56px;border-radius:6px;border:1px solid var(--sb-border);background:#1f1f1f;display:flex;align-items:center;justify-content:center;cursor:pointer;color:#ef4444;transition:background 120ms ease}
+  .dpad-center:hover{background:#333}
+  .dpad-center svg{width:20px;height:20px}
+  .dpad-center:active{background:#2f2f2f}
   .dpad-key{display:none} /* Optional visual toggle */
 
   .action-btn {
