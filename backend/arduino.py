@@ -15,9 +15,6 @@ class ArduinoController:
         self.port = None
         self.read_thread = None
         self.stop_thread = threading.Event()
-        self._last_connect_attempt = 0
-        self._connect_cooldown = 5          # seconds between reconnect attempts
-        self._failed_ports = set()           # ports that failed (e.g. permission denied)
         self.connect()
 
     def find_port(self):
@@ -62,32 +59,17 @@ class ArduinoController:
         if usb_candidates:
             return usb_candidates[0]
 
-        # Build a ranked candidate list. Prefer ports actually enumerated by
-        # pyserial (they are more likely to be accessible) over ports that
-        # merely exist on the filesystem (e.g. /dev/serial0 symlink).
-        fallback_names = ['/dev/serial0', '/dev/ttyAMA0', '/dev/ttyS0']
+        # Fallback priority list of ports to try
+        priority_ports = ['/dev/serial0', '/dev/ttyAMA0', '/dev/ttyS0']
 
-        # 1) Enumerated ports that are also in our priority list
-        candidates = [p for p in fallback_names if p in available_ports]
-        # 2) Enumerated ports NOT in the priority list (catch-all)
-        for p in available_ports:
-            if p not in candidates:
-                candidates.append(p)
-        # 3) Priority ports that exist on the filesystem but weren't enumerated
-        for p in fallback_names:
-            if p not in candidates and os.path.exists(p):
-                candidates.append(p)
-
-        # Skip ports that previously failed (e.g. permission denied)
-        for p in candidates:
-            if p not in self._failed_ports:
+        for p in priority_ports:
+            # On Raspberry Pi, /dev/serial0 and /dev/ttyAMA0 are often not listed by list_ports
+            if p in available_ports or os.path.exists(p):
                 return p
 
-        # If every candidate has failed, clear the failed set and try again
-        # (permissions may have been fixed since last attempt)
-        if candidates:
-            self._failed_ports.clear()
-            return candidates[0]
+        # If no priority port found, just pick the first available one if any
+        if available_ports:
+            return available_ports[0]
 
         return None
 
@@ -111,86 +93,36 @@ class ArduinoController:
 
         return cleaned
 
-    def connect(self, force=False):
-        """Attempt to connect to the Arduino serial port.
+    def connect(self):
+        self.stop_thread.set()
+        if self.read_thread and self.read_thread.is_alive():
+            self.read_thread.join(timeout=1.0)
+            
+        if self.ser and self.ser.is_open:
+            self.ser.close()
 
-        Enforces a cooldown between attempts to prevent log spam when the
-        port is unavailable.  Pass *force=True* to bypass the cooldown
-        (used at startup).
-        """
-        now = time.time()
-        if not force and (now - self._last_connect_attempt) < self._connect_cooldown:
-            return   # too soon — skip this attempt
-        self._last_connect_attempt = now
+        self.port = self.find_port()
+        if not self.port:
+            log.error("No serial ports found!")
+            return
 
         try:
-            self.stop_thread.set()
-            if self.read_thread and self.read_thread.is_alive():
-                self.read_thread.join(timeout=1.0)
-
-            if self.ser and self.ser.is_open:
-                self.ser.close()
-
-            self.port = self.find_port()
-            if not self.port:
-                log.error("No serial ports found!")
-                return
-
-            try:
-                self.ser = serial.Serial(self.port, self.baudrate, timeout=1)
-                log.info(f"Connected to Arduino on {self.port} at {self.baudrate} baud.")
-                self._failed_ports.discard(self.port)   # it worked, remove from failed set
-
-                self.stop_thread.clear()
-                self.read_thread = threading.Thread(target=self._read_serial_loop, daemon=True)
-                self.read_thread.start()
-            except Exception as e:
-                log.error(f"Failed to connect to Arduino on {self.port}: {e}")
-                self._failed_ports.add(self.port)       # remember this port failed
-                err_text = str(e).lower()
-                if "permission denied" in err_text or "errno 13" in err_text:
-                    hint = (
-                        f"Permission denied opening {self.port}. On Raspberry Pi, add the service user to the "
-                        "'dialout' group (e.g. 'sudo usermod -aG dialout <user>') or set "
-                        "SupplementaryGroups=dialout in the systemd unit, then restart the service."
-                    )
-                    emit_log(hint, source="arduino", level="error")
-                    log.error(hint)
-                    # Immediately retry with next candidate port
-                    next_port = self.find_port()
-                    if next_port and next_port != self.port:
-                        log.info(f"Trying next candidate port: {next_port}")
-                        self.port = next_port
-                        try:
-                            self.ser = serial.Serial(self.port, self.baudrate, timeout=1)
-                            log.info(f"Connected to Arduino on {self.port} at {self.baudrate} baud.")
-                            self._failed_ports.discard(self.port)
-                            self.stop_thread.clear()
-                            self.read_thread = threading.Thread(target=self._read_serial_loop, daemon=True)
-                            self.read_thread.start()
-                            return
-                        except Exception as e2:
-                            log.error(f"Failed to connect to Arduino on {self.port}: {e2}")
-                            self._failed_ports.add(self.port)
-                self.ser = None
+            self.ser = serial.Serial(self.port, self.baudrate, timeout=1)
+            log.info(f"Connected to Arduino on {self.port} at {self.baudrate} baud.")
+            
+            self.stop_thread.clear()
+            self.read_thread = threading.Thread(target=self._read_serial_loop, daemon=True)
+            self.read_thread.start()
         except Exception as e:
-            log.error(f"Unexpected Arduino connect error: {e}")
+            log.error(f"Failed to connect to Arduino on {self.port}: {e}")
             self.ser = None
 
     def _read_serial_loop(self):
-        import threading
-        last_alive_log = 0
         while not self.stop_thread.is_set():
-            # Log thread health every 2 seconds
-            now = time.time()
-            if now - last_alive_log > 2:
-                log.debug(f"[SERIAL THREAD] alive, thread={threading.current_thread().ident}")
-                last_alive_log = now
             if self.ser and self.ser.is_open:
                 try:
                     if self.ser.in_waiting > 0:
                         line = self.ser.readline().decode('utf-8', errors='ignore').strip()
-                        log.debug(f"[SERIAL READ] {line}")
                         if line:
                             self._handle_incoming_line(line)
                     else:
@@ -203,54 +135,25 @@ class ArduinoController:
 
     def _handle_incoming_line(self, line):
         # Expected format: log:info:message or just raw text
-        # On shared Pi miniUART the first bytes can be lost, so we also
-        # try to recover truncated "log:" prefixes (e.g. "og:info:..." or
-        # "o:info:...").
-        parsed = False
         if line.startswith("log:"):
-            parsed = self._try_parse_log_line(line[4:])  # strip "log:"
-        elif len(line) > 2 and ":" in line:
-            # Check if it looks like a truncated log line — the part before
-            # the first colon should be a known level or a suffix of one.
-            first_colon = line.index(":")
-            candidate_level = line[:first_colon].lower()
-            known_levels = ["info", "warning", "warn", "error", "debug"]
-            is_truncated_log = any(
-                lvl.endswith(candidate_level) and len(candidate_level) <= len(lvl)
-                for lvl in known_levels
-            )
-            if is_truncated_log:
-                # Reconstruct: treat remaining text as level:message
-                parsed = self._try_parse_log_line(line)
+            parts = line.split(":", 2)
+            if len(parts) >= 3:
+                level = parts[1].lower()
+                msg = parts[2]
+                emit_log(msg, source="arduino", level=level)
+                
+                # Also log to backend terminal
+                if level == "error":
+                    log.error(f"[ARDUINO] {msg}")
+                elif level == "warning" or level == "warn":
+                    log.warning(f"[ARDUINO] {msg}")
+                else:
+                    log.info(f"[ARDUINO] {msg}")
+                return
 
-        if not parsed:
-            # If not formatted as log:, just treat it as debug output
-            emit_log(line, source="arduino", level="info")
-            log.info(f"[ARDUINO RAW] {line}")
-
-    def _try_parse_log_line(self, payload):
-        """Parse 'level:message' payload.  Returns True if parsed successfully."""
-        parts = payload.split(":", 1)
-        if len(parts) < 2:
-            return False
-        # Recover partial level names (e.g. "nfo" -> "info")
-        raw_level = parts[0].lower()
-        level_map = {"info": "info", "nfo": "info", "fo": "info", "o": "info",
-                     "warning": "warning", "warn": "warning", "arning": "warning",
-                     "error": "error", "rror": "error", "ror": "error",
-                     "debug": "debug", "ebug": "debug"}
-        level = level_map.get(raw_level)
-        if not level:
-            return False
-        msg = parts[1]
-        emit_log(msg, source="arduino", level=level)
-        if level == "error":
-            log.error(f"[ARDUINO] {msg}")
-        elif level in ("warning", "warn"):
-            log.warning(f"[ARDUINO] {msg}")
-        else:
-            log.info(f"[ARDUINO] {msg}")
-        return True
+        # If not formatted as log:, just treat it as debug output
+        emit_log(line, source="arduino", level="info")
+        log.info(f"[ARDUINO RAW] {line}")
 
     def send_command(self, cmd: str):
         cmd = self._normalize_outgoing_command(cmd)
@@ -259,17 +162,14 @@ class ArduinoController:
 
         if not self.ser or not self.ser.is_open:
             log.warning("Serial not connected, trying to reconnect...")
-            self.connect()   # cooldown enforced inside connect()
+            self.connect()
 
         if self.ser and self.ser.is_open:
             try:
                 if not cmd.endswith('\n'):
                     cmd += '\n'
                 self.ser.write(cmd.encode('utf-8'))
-                self.ser.flush()     # ensure TX buffer is fully drained
-                time.sleep(0.01)     # give the line time to settle before Arduino replies
                 log.info(f"Sent to Arduino ({self.port}): {cmd.strip()}")
-                log.debug(f"[SERIAL WRITE] {cmd.strip()}")
             except Exception as e:
                 log.error(f"Error sending command to Arduino: {e}")
                 self.ser = None
