@@ -249,16 +249,31 @@
     padding:0;
     box-shadow:none;
   }
-  .dpad-btn{width:56px;height:56px;border-radius:6px;border:1px solid var(--sb-border);background:var(--sb-bubble);display:flex;align-items:center;justify-content:center;cursor:pointer;color:#fff;transition:background 120ms ease}
+  .dpad-btn{width:56px;height:56px;border-radius:6px;border:1px solid var(--sb-border);background:var(--sb-bubble);display:flex;align-items:center;justify-content:center;cursor:pointer;color:#fff;transition:background 120ms ease;position:relative}
   .dpad-btn:hover{background:#333}
   .dpad-btn svg{width:22px;height:22px}
   .dpad-btn:active{background:#2f2f2f}
   .dpad-btn.pressed{background:var(--sb-accent);border-color:var(--sb-accent);color:#fff}
-  .dpad-center{width:56px;height:56px;border-radius:6px;border:1px solid var(--sb-border);background:#1f1f1f;display:flex;align-items:center;justify-content:center;cursor:pointer;color:#ef4444;transition:background 120ms ease}
+  .dpad-center{width:56px;height:56px;border-radius:6px;border:1px solid var(--sb-border);background:#1f1f1f;display:flex;align-items:center;justify-content:center;cursor:pointer;color:#ef4444;transition:background 120ms ease;position:relative}
   .dpad-center:hover{background:#333}
   .dpad-center svg{width:20px;height:20px}
   .dpad-center:active{background:#2f2f2f}
-  .dpad-key{display:none} /* Optional visual toggle */
+  .dpad-key{
+    position:absolute;
+    bottom:4px;
+    right:4px;
+    font-size:9px;
+    font-weight:800;
+    color:var(--sb-muted);
+    background:rgba(0,0,0,0.4);
+    padding:1px 4px;
+    border-radius:3px;
+    border:1px solid rgba(255,255,255,0.1);
+  }
+  .dpad-btn.pressed .dpad-key{
+    color:#fff;
+    border-color:rgba(255,255,255,0.4);
+  }
 
   .action-btn {
     height: 52px;

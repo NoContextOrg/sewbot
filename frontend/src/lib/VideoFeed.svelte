@@ -29,7 +29,7 @@
   <div class="overlay-head">
     <div class="overlay-brand">
       <div class="brand-name">SEWBOT</div>
-      <div class="brand-sub">ROBOTIC CONTROLLER</div>
+      <div class="brand-sub">The Sewage Robots</div>
     </div>
     <div class="overlay-status">
       <span class="pill live-feed-indicator {liveFeed ? 'live' : 'not-live'}">
