@@ -51,7 +51,7 @@
       {chatOpen} 
       on:move={handleMove}
       on:action={handleAction}
-      on:bubble={(e) => dispatch('bubble', { text: e.detail, cls: 'system', ts: new Date().toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}) })}
+      on:bubble={(e) => dispatch('bubble', { text: e.detail, cls: 'system', ts: new Date().toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}), source: 'frontend' })}
       on:poweroff={() => dispatch('poweroff')}
       on:toggleCamera={() => cameraOn = !cameraOn}
       on:toggleLog={() => chatOpen = !chatOpen}
@@ -125,10 +125,37 @@
     border-left:4px solid #EF4444;
     color:#FCA5A5;
   }
-  ::slotted(.bubble) .ts{
+  ::slotted(.bubble) .ts {
+    display:block;
     margin-top:6px;
     font-size:11px;
     color:var(--sb-accent);
     letter-spacing:0.06em;
+  }
+  ::slotted(.source) {
+    display: inline-block;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 10px;
+    font-weight: 800;
+    text-transform: uppercase;
+    margin-right: 6px;
+    letter-spacing: 0.05em;
+  }
+  ::slotted(.source-arduino) {
+    background: #0D9488;
+    color: #fff;
+  }
+  ::slotted(.source-backend) {
+    background: #2563EB;
+    color: #fff;
+  }
+  ::slotted(.source-shell) {
+    background: #4B5563;
+    color: #fff;
+  }
+  ::slotted(.source-frontend) {
+    background: #9333EA;
+    color: #fff;
   }
 </style>

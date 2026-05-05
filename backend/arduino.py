@@ -2,6 +2,8 @@ import serial
 import serial.tools.list_ports
 import time
 import logging
+import threading
+from logger import emit_log
 
 log = logging.getLogger("sewbot")
 
@@ -10,6 +12,8 @@ class ArduinoController:
         self.baudrate = baudrate
         self.ser = None
         self.port = None
+        self.read_thread = None
+        self.stop_thread = threading.Event()
         self.connect()
 
     def find_port(self):
@@ -32,6 +36,13 @@ class ArduinoController:
         return None
 
     def connect(self):
+        self.stop_thread.set()
+        if self.read_thread and self.read_thread.is_alive():
+            self.read_thread.join(timeout=1.0)
+            
+        if self.ser and self.ser.is_open:
+            self.ser.close()
+
         self.port = self.find_port()
         if not self.port:
             log.error("No serial ports found!")
@@ -40,9 +51,51 @@ class ArduinoController:
         try:
             self.ser = serial.Serial(self.port, self.baudrate, timeout=1)
             log.info(f"Connected to Arduino on {self.port} at {self.baudrate} baud.")
+            
+            self.stop_thread.clear()
+            self.read_thread = threading.Thread(target=self._read_serial_loop, daemon=True)
+            self.read_thread.start()
         except Exception as e:
             log.error(f"Failed to connect to Arduino on {self.port}: {e}")
             self.ser = None
+
+    def _read_serial_loop(self):
+        while not self.stop_thread.is_set():
+            if self.ser and self.ser.is_open:
+                try:
+                    if self.ser.in_waiting > 0:
+                        line = self.ser.readline().decode('utf-8', errors='ignore').strip()
+                        if line:
+                            self._handle_incoming_line(line)
+                    else:
+                        time.sleep(0.01)
+                except Exception as e:
+                    log.error(f"Serial read error: {e}")
+                    time.sleep(1)
+            else:
+                time.sleep(1)
+
+    def _handle_incoming_line(self, line):
+        # Expected format: log:info:message or just raw text
+        if line.startswith("log:"):
+            parts = line.split(":", 2)
+            if len(parts) >= 3:
+                level = parts[1].lower()
+                msg = parts[2]
+                emit_log(msg, source="arduino", level=level)
+                
+                # Also log to backend terminal
+                if level == "error":
+                    log.error(f"[ARDUINO] {msg}")
+                elif level == "warning" or level == "warn":
+                    log.warning(f"[ARDUINO] {msg}")
+                else:
+                    log.info(f"[ARDUINO] {msg}")
+                return
+
+        # If not formatted as log:, just treat it as debug output
+        emit_log(line, source="arduino", level="info")
+        log.info(f"[ARDUINO RAW] {line}")
 
     def send_command(self, cmd: str):
         if not self.ser or not self.ser.is_open:

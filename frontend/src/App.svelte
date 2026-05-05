@@ -23,7 +23,7 @@
   });
 
   function handleBubble(e){
-    appendMessage({ text: e.detail.text, cls: e.detail.cls, ts: e.detail.ts });
+    appendMessage({ text: e.detail.text, cls: e.detail.cls, ts: e.detail.ts, source: e.detail.source || '' });
   }
 
   function handleCommand(e){
@@ -48,8 +48,11 @@
   <svelte:fragment slot="bubbles">
     {#each $messages as m}
       <div class="bubble {m.cls}">
-        <div class="msg">{m.text}</div>
-        <div class="ts">{m.ts}</div>
+        {#if m.source}
+          <span class="source source-{m.source}">{m.source}</span>
+        {/if}
+        <span class="msg">{m.text}</span>
+        <span class="ts">{m.ts}</span>
       </div>
     {/each}
   </svelte:fragment>

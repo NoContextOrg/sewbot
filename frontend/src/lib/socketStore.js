@@ -48,13 +48,12 @@ export const initSocket = () => {
   socket.on("telemetry", (data) => telemetry.set(data));
   socket.on("log", (entry) => {
     if (!entry || !entry.text) return;
-    const source = entry.source ? `[${entry.source}] ` : "";
-    const text = `${source}${entry.text}`.trim();
+    const text = entry.text.trim();
     if (!text) return;
 
     const level = (entry.level || "").toLowerCase();
     const cls = entry.cls || (level === "error" ? "error" : level === "warning" ? "warn" : "system");
-    appendMessage({ text, cls, ts: entry.ts || nowTs() });
+    appendMessage({ text, source: entry.source || "", cls, ts: entry.ts || nowTs() });
   });
 
   socket.connect();

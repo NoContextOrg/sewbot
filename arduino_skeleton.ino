@@ -12,6 +12,13 @@ const int MOTOR_RIGHT_B = 5;
 const int PUMP_PIN = 6;
 const int CONVEYOR_PIN = 7;
 
+void sendLog(String level, String msg) {
+  Serial.print("log:");
+  Serial.print(level);
+  Serial.print(":");
+  Serial.println(msg);
+}
+
 void setup() {
   // Start Serial communication at 9600 baud
   // Must match the Python backend's baudrate!
@@ -27,6 +34,8 @@ void setup() {
   
   // Initialize states
   stopAll();
+  
+  sendLog("info", "Arduino initialized and ready");
 }
 
 void loop() {
@@ -46,12 +55,14 @@ void processCommand(String cmd) {
   int colonIndex = cmd.indexOf(':');
   
   if (colonIndex == -1) {
-    // Invalid format, ignore
+    sendLog("error", "Invalid format: " + cmd);
     return; 
   }
   
   String category = cmd.substring(0, colonIndex);
   String action = cmd.substring(colonIndex + 1);
+  
+  sendLog("info", "Processing " + category + ":" + action);
 
   // --- 1. MOVEMENT CONTROL ---
   if (category == "move") {

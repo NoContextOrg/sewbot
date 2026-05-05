@@ -1,8 +1,9 @@
 <script>
-  import { createEventDispatcher } from 'svelte';
+  import { createEventDispatcher, afterUpdate } from 'svelte';
   export let chatOpen = false;
   
   let chatText = '';
+  let chatLogElement;
   const dispatch = createEventDispatcher();
 
   function submitCommand(){
@@ -11,12 +12,18 @@
     dispatch('command', { text: v });
     chatText = '';
   }
+
+  afterUpdate(() => {
+    if (chatLogElement) {
+      chatLogElement.scrollTop = chatLogElement.scrollHeight;
+    }
+  });
 </script>
 
 {#if chatOpen}
   <aside class="chat-panel chat-modal">
     <div class="chat-header">System Log</div>
-    <div class="chat-log" id="chatLog">
+    <div class="chat-log" id="chatLog" bind:this={chatLogElement}>
       <slot></slot>
     </div>
     <div class="chat-input">
