@@ -17,8 +17,9 @@ class ArduinoController:
         self.connect()
 
     def find_port(self):
+        import os
         # Priority list of ports to try
-        priority_ports = ['/dev/serial0', '/dev/ttyAMA0', '/dev/ttyUSB0', '/dev/ttyACM0']
+        priority_ports = ['/dev/serial0', '/dev/ttyAMA0', '/dev/ttyS0', '/dev/ttyUSB0', '/dev/ttyACM0']
         
         # Get all available ports
         available_ports = [p.device for p in serial.tools.list_ports.comports()]
@@ -26,7 +27,8 @@ class ArduinoController:
 
         # Try priority ports first
         for p in priority_ports:
-            if p in available_ports:
+            # On Raspberry Pi, /dev/serial0 and /dev/ttyAMA0 are often not listed by list_ports
+            if p in available_ports or os.path.exists(p):
                 return p
         
         # If no priority port found, just pick the first available one if any
