@@ -5,10 +5,11 @@
 
   const dispatch = createEventDispatcher();
 
-  let pressed = { w: false, a: false, s: false, d: false };
+  let pressed = { w: false, a: false, s: false, d: false, 1: false, 2: false, 3: false, 4: false, 5: false, 6: false, 7: false, 8: false, 9: false, 0: false };
 
   function emitMovement() {
-    const activeKeys = Object.keys(pressed).filter(k => pressed[k]).join('');
+    const movementKeys = ['w', 'a', 's', 'd'];
+    const activeKeys = movementKeys.filter(k => pressed[k]).join('');
     if (activeKeys.length > 0) {
       dispatch('move', activeKeys);
     } else {
@@ -23,7 +24,7 @@
 
   function stopDir(dir, fromKeyboard = false){
     if (dir === null) {
-      pressed = { w: false, a: false, s: false, d: false };
+      pressed = { ...pressed, w: false, a: false, s: false, d: false };
       emitMovement();
       return;
     }
@@ -39,7 +40,7 @@
         emitMovement();
       }
     } else if (!dir) {
-      pressed = { w: false, a: false, s: false, d: false };
+      pressed = { ...pressed, w: false, a: false, s: false, d: false };
       emitMovement();
     }
   }
@@ -48,27 +49,47 @@
     const tag = document.activeElement?.tagName;
     if (tag === 'INPUT' || tag === 'TEXTAREA') return;
     const key = e.key.toLowerCase();
+    
+    // Movement keys
     if (['w','a','s','d'].includes(key) && !pressed[key]) {
       sendDir(key);
     }
+    
+    // Action keys
+    if (['1','2','3','4','5','6','7','8','9','0'].includes(key) && !pressed[key]) {
+      pressed = { ...pressed, [key]: true };
+      if (key === '1') handleSideFlap('open');
+      if (key === '2') handleSideFlap('close');
+      if (key === '3') handleRamp('open');
+      if (key === '4') handleRamp('close');
+      if (key === '5') handleSpray('left');
+      if (key === '6') handleSpray('right');
+      if (key === '7') handlePump('on');
+      if (key === '8') handlePump('off');
+      if (key === '9') handleConveyor('on');
+      if (key === '0') handleConveyor('off');
+    }
   }
+
   function handleKeyUp(e) {
     const tag = document.activeElement?.tagName;
     if (tag === 'INPUT' || tag === 'TEXTAREA') return;
     const key = e.key.toLowerCase();
+    
+    // Movement keys
     if (['w','a','s','d'].includes(key)) {
       stopDir(key, true);
     }
+    
+    // Action keys (visual reset)
+    if (['1','2','3','4','5','6','7','8','9','0'].includes(key)) {
+      setTimeout(() => {
+        pressed = { ...pressed, [key]: false };
+      }, 100);
+    }
   }
 
-  onMount(() => {
-    window.addEventListener('keydown', handleKeyDown);
-    window.addEventListener('keyup', handleKeyUp);
-    return () => {
-      window.removeEventListener('keydown', handleKeyDown);
-      window.removeEventListener('keyup', handleKeyUp);
-    };
-  });
+  // Removed onMount event listeners, using <svelte:window> instead
 
   function powerOff(){ dispatch('poweroff'); }
   function toggleCamera(){ dispatch('toggleCamera'); }
@@ -86,27 +107,29 @@
   function handleConveyor(action) { handleAction('conveyor', action); }
 </script>
 
+<svelte:window on:keydown={handleKeyDown} on:keyup={handleKeyUp} />
+
 <footer class="control-pad-overlay">
   <div class="side-panel">
     <div class="control-section">
       <div class="section-title">SIDE FLAPS</div>
       <div class="control-row">
-        <button class="action-btn" on:click={() => handleSideFlap('open')}>Open</button>
-        <button class="action-btn" on:click={() => handleSideFlap('close')}>Close</button>
+        <button class="action-btn {pressed['1'] ? 'pressed' : ''}" on:click={() => handleSideFlap('open')}>Open <span class="hotkey">1</span></button>
+        <button class="action-btn {pressed['2'] ? 'pressed' : ''}" on:click={() => handleSideFlap('close')}>Close <span class="hotkey">2</span></button>
       </div>
     </div>
     <div class="control-section">
       <div class="section-title">RAMP</div>
       <div class="control-row">
-        <button class="action-btn" on:click={() => handleRamp('open')}>Open</button>
-        <button class="action-btn" on:click={() => handleRamp('close')}>Close</button>
+        <button class="action-btn {pressed['3'] ? 'pressed' : ''}" on:click={() => handleRamp('open')}>Open <span class="hotkey">3</span></button>
+        <button class="action-btn {pressed['4'] ? 'pressed' : ''}" on:click={() => handleRamp('close')}>Close <span class="hotkey">4</span></button>
       </div>
     </div>
     <div class="control-section wide">
       <div class="section-title">SPRAY</div>
       <div class="control-row">
-        <button class="action-btn" on:click={() => handleSpray('left')}>Left</button>
-        <button class="action-btn" on:click={() => handleSpray('right')}>Right</button>
+        <button class="action-btn {pressed['5'] ? 'pressed' : ''}" on:click={() => handleSpray('left')}>Left <span class="hotkey">5</span></button>
+        <button class="action-btn {pressed['6'] ? 'pressed' : ''}" on:click={() => handleSpray('right')}>Right <span class="hotkey">6</span></button>
       </div>
     </div>
   </div>
@@ -136,7 +159,7 @@
 
         <div></div>
         <button class="dpad-btn {pressed.s ? 'pressed' : ''}" aria-label="Down" on:pointerdown={() => sendDir('s')} on:pointerup={() => stopDir('s')} on:pointerleave={() => stopDir('s')}>
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V8m-4-4l4 4 4-4" stroke="currentColor" fill="none" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 8v8M8 12l4 4 4-4" stroke="currentColor" fill="none" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
           <span class="dpad-key">S</span>
         </button>
         <div></div>
@@ -148,15 +171,15 @@
     <div class="control-section">
       <div class="section-title">PUMP</div>
       <div class="control-row">
-        <button class="action-btn" on:click={() => handlePump('on')}>On</button>
-        <button class="action-btn" on:click={() => handlePump('off')}>Off</button>
+        <button class="action-btn {pressed['7'] ? 'pressed' : ''}" on:click={() => handlePump('on')}>On <span class="hotkey">7</span></button>
+        <button class="action-btn {pressed['8'] ? 'pressed' : ''}" on:click={() => handlePump('off')}>Off <span class="hotkey">8</span></button>
       </div>
     </div>
     <div class="control-section">
       <div class="section-title">CONVEYOR</div>
       <div class="control-row">
-        <button class="action-btn" on:click={() => handleConveyor('on')}>On</button>
-        <button class="action-btn" on:click={() => handleConveyor('off')}>Off</button>
+        <button class="action-btn {pressed['9'] ? 'pressed' : ''}" on:click={() => handleConveyor('on')}>On <span class="hotkey">9</span></button>
+        <button class="action-btn {pressed['0'] ? 'pressed' : ''}" on:click={() => handleConveyor('off')}>Off <span class="hotkey">0</span></button>
       </div>
     </div>
     <div class="control-section wide">
@@ -246,6 +269,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
+    gap: 8px;
     cursor: pointer;
     color: #fff;
     font-weight: bold;
@@ -256,8 +280,21 @@
   .action-btn:hover {
     background: #333;
   }
-  .action-btn:active {
-    background: #2f2f2f;
+  .action-btn:active, .action-btn.pressed {
+    background: var(--sb-accent);
+    border-color: var(--sb-accent);
+  }
+  .hotkey {
+    background: rgba(0,0,0,0.3);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 4px;
+    padding: 2px 6px;
+    font-size: 10px;
+    color: var(--sb-muted);
+  }
+  .action-btn.pressed .hotkey {
+    color: #fff;
+    border-color: rgba(255,255,255,0.4);
   }
 
   .btn-power{height:52px;min-width:86px;padding:0 14px;border-radius:6px;border:1px solid #991B1B;background:#7F1D1D;color:#fff;font-weight:800;letter-spacing:0.08em;text-transform:uppercase;font-size:13px;cursor:pointer;transition:background 120ms ease, border-color 120ms ease}
