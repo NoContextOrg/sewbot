@@ -94,27 +94,31 @@ class ArduinoController:
         return cleaned
 
     def connect(self):
-        self.stop_thread.set()
-        if self.read_thread and self.read_thread.is_alive():
-            self.read_thread.join(timeout=1.0)
-            
-        if self.ser and self.ser.is_open:
-            self.ser.close()
-
-        self.port = self.find_port()
-        if not self.port:
-            log.error("No serial ports found!")
-            return
-
         try:
-            self.ser = serial.Serial(self.port, self.baudrate, timeout=1)
-            log.info(f"Connected to Arduino on {self.port} at {self.baudrate} baud.")
-            
-            self.stop_thread.clear()
-            self.read_thread = threading.Thread(target=self._read_serial_loop, daemon=True)
-            self.read_thread.start()
+            self.stop_thread.set()
+            if self.read_thread and self.read_thread.is_alive():
+                self.read_thread.join(timeout=1.0)
+
+            if self.ser and self.ser.is_open:
+                self.ser.close()
+
+            self.port = self.find_port()
+            if not self.port:
+                log.error("No serial ports found!")
+                return
+
+            try:
+                self.ser = serial.Serial(self.port, self.baudrate, timeout=1)
+                log.info(f"Connected to Arduino on {self.port} at {self.baudrate} baud.")
+
+                self.stop_thread.clear()
+                self.read_thread = threading.Thread(target=self._read_serial_loop, daemon=True)
+                self.read_thread.start()
+            except Exception as e:
+                log.error(f"Failed to connect to Arduino on {self.port}: {e}")
+                self.ser = None
         except Exception as e:
-            log.error(f"Failed to connect to Arduino on {self.port}: {e}")
+            log.error(f"Unexpected Arduino connect error: {e}")
             self.ser = None
 
     def _read_serial_loop(self):

@@ -129,8 +129,12 @@ def setup_routes(app, socketio):
             direction = data["direction"]
             log.info("Command: %s", direction)
             # Send movement command to Arduino (e.g. "move:w")
-            from arduino import arduino
-            arduino.send_command(f"move:{direction}")
+            try:
+                from arduino import arduino
+                arduino.send_command(f"move:{direction}")
+            except Exception as e:
+                log.exception("Failed to send move command to Arduino")
+                emit_log(f"Arduino move failed: {e}", source="arduino", level="error", sid=request.sid)
 
     @socketio.on('action')
     def handle_action(data):
@@ -139,8 +143,12 @@ def setup_routes(app, socketio):
             action_val = data.get("action")
             log.info(f"Action: {action_type} -> {action_val}")
             # Send auxiliary command to Arduino (e.g. "sideFlap:open")
-            from arduino import arduino
-            arduino.send_command(f"{action_type}:{action_val}")
+            try:
+                from arduino import arduino
+                arduino.send_command(f"{action_type}:{action_val}")
+            except Exception as e:
+                log.exception("Failed to send action command to Arduino")
+                emit_log(f"Arduino action failed: {e}", source="arduino", level="error", sid=request.sid)
 
     @app.route('/api/action', methods=['POST'])
     def api_action():
@@ -149,7 +157,12 @@ def setup_routes(app, socketio):
         action_val = data.get("action")
         if action_type and action_val:
             log.info(f"API Action: {action_type} -> {action_val}")
-            from arduino import arduino
-            arduino.send_command(f"{action_type}:{action_val}")
-            return {"status": "ok", "message": "Command sent"}, 200
+            try:
+                from arduino import arduino
+                arduino.send_command(f"{action_type}:{action_val}")
+                return {"status": "ok", "message": "Command sent"}, 200
+            except Exception as e:
+                log.exception("Failed to send API action to Arduino")
+                emit_log(f"Arduino API action failed: {e}", source="arduino", level="error")
+                return {"status": "error", "message": "Arduino send failed"}, 500
         return {"status": "error", "message": "Missing type or action"}, 400

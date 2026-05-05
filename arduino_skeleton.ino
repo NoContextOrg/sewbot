@@ -10,6 +10,8 @@ const int MOTOR_RIGHT_B = 28;
 const int PUMP_PIN = 34;
 const int CONVEYOR_PIN = 30;
 
+void sendLog(String level, String msg);
+
 // ---------------- PROTOCOL HELPERS ----------------
 // Accept either full commands like "move:w" or shorthand movement strings like "wa".
 // Non-command UART text (e.g., Raspberry Pi boot console output) is ignored.
